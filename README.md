@@ -1,68 +1,114 @@
-# Quellum
+# Quellum — Hallucination Detection Research
 
-Hallucination-aware RAG verification, login-free. Upload a PDF or paste text -> Analyze -> ask questions -> conversations are saved
-(anonymously, per browser) -> History -> resume. Everything expires **30 days after the last real activity**.
+This repository contains the research implementation of a lightweight hallucination detector for Retrieval-Augmented Generation (RAG). The research investigates how grounding-related features, neural sequence modelling, and ensemble scoring can help identify unsupported content in generated responses.
 
-```
-frontend/   existing Quellum UI (vanilla HTML/CSS/JS, unchanged design) + api.js (client) + tests/smoke.test.js
-backend/    FastAPI: anonymous sessions, SQLite storage, retrieval, answer generation hook, hallucination detector (8-seed ensemble), cleanup
-```
+The objective is to develop a computationally practical approach to hallucination detection without relying on an LLM-based judge.
 
-## How it works
-**Anonymous sessions.** First request -> the server creates a random 256-bit secret, stores only its SHA-256, and sends it in an
-`HttpOnly; SameSite=Lax` (`Secure` in production) cookie. JavaScript never sees it. Every document/conversation query is scoped by the session
-resolved from that cookie; ids in URLs are only names. Another session's id answers `404`, same as a missing id (no existence leak).
-A guessed/forged cookie or an id used as a cookie resolves to nothing.
+## Research Objective
 
-**Conversations & restore.** Analyze uploads the PDF (or text) once to a private store (not a public URL; served only through
-`GET /api/documents/:id/file` after the ownership check). The first question creates a conversation bound to that document; each answer stores
-the question, answer, the retrieved passages (page + excerpt) and the detector's result. History lists non-expired conversations of the session;
-"Open in Workspace" fetches the conversation and the original PDF/text from the server and appends new questions to the same conversation.
-Replacing the document clears the chat and starts a new conversation.
+Retrieval-Augmented Generation provides language models with external evidence, but generated answers may still contain unsupported claims or contradict the retrieved context.
 
-**Expiry.** `expires_at = last_activity + 30 days`, extended only by a stored question/answer. Opening History, refreshing or renaming does not extend it.
-Every read filters `expires_at > now`, so expired data is unreachable immediately, even if cleanup has not run. An expired conversation returns `410`
-and the UI shows "This conversation has expired after 30 days of inactivity." with a "Start a new conversation" button.
+This research explores a feature-based detection approach that evaluates the relationship between generated responses and their supporting evidence.
 
-**Cleanup** (`app/services/cleanup.py`; idempotent, each step its own transaction, retries safe): expired conversations (+ messages/evidence, leaving a
-content-free tombstone so the owner sees "expired") -> documents no conversation references (+ pasted text + embeddings) -> queued PDF unlinks (failures stay
-queued and are retried) -> orphan files on disk -> orphan chunks, old tombstones, expired sessions that own nothing. A document shared by two
-conversations survives until the last one is gone. Uploads never attached to a conversation are removed after 24 h.
+The main areas of investigation are:
 
-## Run locally
-```
-cd backend
-python -m venv .venv && .venv\Scripts\activate          # Windows;  source .venv/bin/activate elsewhere
-pip install -r requirements.txt
-copy ..\.env.example .env      # then export/set the variables (the app reads the process environment)
-uvicorn app.main:app --port 8000
-```
-Open http://localhost:8000 (the backend serves `frontend/`, so everything is same-origin: no CORS, plain cookies).
+* Evidence-grounding feature extraction.
+* BiGRU-based sequence modelling.
+* NLI-derived features for evidence comparison.
+* Ensemble prediction across independently trained models.
+* Experimental evaluation of detection performance.
 
-* **Answers need provider credentials.** Groq is primary and Gemini is called once only if Groq fails. Set `GROQ_API_KEY` and, optionally, `GEMINI_API_KEY`; model ids and bounded prompt size are configurable in `.env`. OpenAI-compatible and Anthropic providers remain available through the legacy `QUELLUM_LLM_*` settings. Without a configured provider key, questions return 503 - nothing is faked.
-* **Detector ensemble.** Models 0–7 are loaded by default (`QUELLUM_DETECTOR_SEEDS=0,1,2,3,4,5,6,7`); models 8–9 can be selected instead or in another configured ensemble. The published detector metrics and threshold in `artifacts/` still describe the original five-model validation run and are not recalibrated for a different seed selection.
-* **Hallucination analysis** needs the detector set up as in `backend/README.md` (research files, `export_artifacts.py`, `verify_ensemble.py`, `parity_test.py`).
-  Until then answers are saved with `hallucinationResult.status = "unavailable"` and the UI says so.
-* **Retrieval embeddings**: `QUELLUM_EMBEDDER=sbert` (default, same MiniLM the detector uses) or `hashing` (no ML dependencies; lexical, for development).
+## Methodology
 
-## Tests
-```
-cd backend && python -m unittest tests.test_storage -v     # sessions, isolation, expiry (accelerated clock), cleanup, limits  - 25 tests
-cd backend && pytest tests/test_api.py -v                   # HTTP layer; needs fastapi + httpx installed
-node frontend/tests/smoke.test.js                           # real script.js against a stub DOM + fake API contract
-```
+### Grounding Features
 
-## Deploy
-Single instance with a **persistent disk** (SQLite + PDFs live in `QUELLUM_DATA_DIR`). `Dockerfile` provided (mount a volume at `/data`).
-Production env: `QUELLUM_ENV=production` (Secure cookies), HTTPS in front (reverse proxy / platform), keep the default same-origin setup.
-Split hosting (frontend and API on different sites): set `window.QUELLUM_API_BASE` in `index.html` before `api.js`, `QUELLUM_COOKIE_SAMESITE=none`,
-`QUELLUM_COOKIE_SECURE=true`, `QUELLUM_CORS_ORIGINS=https://your-frontend` (exact origin, never `*`). Same-site subdomains can keep `lax`.
-Set a body-size limit at the proxy (e.g. nginx `client_max_body_size 21m`): the app rejects oversized `Content-Length` but multipart is parsed before handlers run.
-Rate limits are in-process (correct for one instance; use the platform/Redis limiter if you scale out - SQLite also means one writer instance).
+The detector uses features that capture different aspects of the relationship between a response and its supporting evidence. These include lexical coverage, semantic similarity, entity mismatches, numerical inconsistencies, and other grounding-related signals.
 
-**Scheduled cleanup.** The server runs it every `QUELLUM_CLEANUP_INTERVAL_MINUTES` (default 60) and once at startup. For a schedule independent of the web process run
-`python -m app.cleanup_cli` (exit code 1 if a step failed) from: cron (`0 * * * *`), a systemd timer, Windows Task Scheduler, a platform cron job
-(Render/Railway/Fly) sharing the same disk, or `docker exec <container> python -m app.cleanup_cli`. Overlapping runs are safe.
+### BiGRU-Based Detection
 
-## Dashboard / credentials you must provide (nothing here is pre-configured)
-LLM provider account + key + model id; a hosting platform with a persistent volume and HTTPS; (optional) a scheduler for `cleanup_cli`.
+A bidirectional gated recurrent unit (BiGRU) processes response-level features to learn patterns associated with supported and unsupported content.
+
+### NLI-Derived Features
+
+Additional features derived from natural language inference provide signals about relationships between generated content and retrieved evidence, including entailment and contradiction.
+
+### Ensemble Scoring
+
+Predictions from independently trained models can be combined to form an ensemble. The selected models, score aggregation procedure, and decision threshold affect the resulting performance and should be documented for each reported configuration.
+
+## Dataset and Evaluation
+
+Experiments use **RAGTruth**, a benchmark dataset for hallucination detection in retrieval-augmented generation.
+
+Source-disjoint data splits are used to reduce the risk of leakage between training and evaluation examples.
+
+Performance is evaluated using metrics including:
+
+* **F1-score:** Measures the balance between precision and recall at a selected decision threshold.
+* **AUROC:** Measures discrimination between hallucinated and faithful examples across thresholds.
+* **AUPRC:** Summarizes the precision-recall trade-off across thresholds and is particularly informative when class distributions are imbalanced.
+
+### Reported Results
+
+| Metric   | Score |
+| -------- | ----: |
+| F1-score |  73.9 |
+| AUROC    | 0.873 |
+
+These results must be interpreted in the context of the specific evaluation configuration from which they were obtained.
+
+The metrics and threshold currently stored in `artifacts/` correspond to the original five-model validation run. They should not be presented as results for the eight-model ensemble unless that configuration has been evaluated separately.
+
+## Implementation
+
+The research implementation consists of the following modules:
+
+| File              | Purpose                                                     |
+| ----------------- | ----------------------------------------------------------- |
+| `model6.py`       | Model architecture, training logic, and inference utilities |
+| `extra_feats.py`  | Additional feature extraction                               |
+| `nli_features.py` | NLI-derived feature processing                              |
+| `synth.py`        | Synthetic training-data utilities                           |
+
+These files should remain compatible with one another. In particular, `model6.py` imports `synth.py` at module load time, even when synthetic augmentation is disabled.
+
+### Inference and Artifact Utilities
+
+The implementation also includes utilities for preparing and validating the detector artifacts:
+
+* `export_artifacts.py`
+* `verify_ensemble.py`
+* `parity_test.py`
+
+These support artifact export, ensemble verification, and consistency testing of the inference implementation.
+
+## Reproducibility
+
+Reproducing the reported results requires matching the original experimental configuration, including:
+
+* Dataset preprocessing and source-disjoint splits.
+* Feature groups and feature-generation settings.
+* NLI feature configuration.
+* Training hyperparameters and random seeds.
+* Decision-threshold selection.
+* Ensemble membership and score aggregation.
+* Evaluation metrics on the held-out test set.
+
+Cached features must correspond to the preprocessing and feature configuration used in the relevant experiment. Synthetic augmentation, when enabled, must be restricted to training data.
+
+For reliable comparisons, ablation experiments should change one principal component at a time while keeping the remaining evaluation conditions consistent.
+
+## Limitations
+
+* Performance on RAGTruth does not guarantee equivalent performance on other datasets or domains.
+* Feature extraction and NLI processing introduce additional computational costs.
+* The detector may produce false positives and false negatives.
+* Ensemble performance depends on model selection, score aggregation, and threshold calibration.
+* Further evaluation on independent datasets is needed to assess generalization.
+
+## Research Scope
+
+This work investigates a lightweight, feature-based approach to hallucination detection in RAG systems. It focuses on evidence-grounding signals, recurrent sequence modelling, and ensemble-based evaluation.
+
+The aim is to assess whether these components can provide useful hallucination detection performance while avoiding dependence on an LLM-based judge.
+
