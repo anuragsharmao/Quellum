@@ -1,0 +1,1355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quellum — A Hallucination Aware RAG</title>
+  
+  <!-- Google Fonts: Plus Jakarta Sans & Caveat (for authentic handwriting) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Favicon: Corrected Q Icon with pink-to-orange/yellow gradient -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='qGrad' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23ec4899'/%3E%3Cstop offset='50%25' stop-color='%23f97316'/%3E%3Cstop offset='100%25' stop-color='%23fbbf24'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='46' cy='46' r='30' fill='none' stroke='url(%23qGrad)' stroke-width='14' stroke-linecap='round'/%3E%3Cpath d='M58 58 L78 78' stroke='%23f97316' stroke-width='14' stroke-linecap='round'/%3E%3C/svg%3E">
+  
+  <link rel="stylesheet" href="style.css?v=20261015_08">
+  <!-- PDF.js for rendering real PDF documents and generating thumbnails -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+
+  <!-- =========================================================================
+       1. Atmospheric Luminous Background Canvas
+       ========================================================================= -->
+  <div class="background-canvas" aria-hidden="true">
+    <div class="bg-base-tone"></div>
+    <div class="bg-glow-tl"></div>
+    <div class="bg-glow-tr"></div>
+    <div class="bg-glow-bl"></div>
+    <div class="bg-glow-br"></div>
+    <div class="bg-center-wash"></div>
+
+    <!-- Translucent flowing gradient organic wave ribbons -->
+    <svg class="bg-waves-svg" viewBox="0 0 1440 900" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="tlFlow" x1="0%" y1="0%" x2="50%" y2="50%">
+          <stop offset="0%" stop-color="#bae6fd" stop-opacity="0.45" />
+          <stop offset="50%" stop-color="#e0e7ff" stop-opacity="0.25" />
+          <stop offset="100%" stop-color="#faf8f5" stop-opacity="0" />
+        </linearGradient>
+        <linearGradient id="blRoseFlow" x1="0%" y1="100%" x2="60%" y2="50%">
+          <stop offset="0%" stop-color="#fbcfe8" stop-opacity="0.5" />
+          <stop offset="50%" stop-color="#fed7aa" stop-opacity="0.2" />
+          <stop offset="100%" stop-color="#faf8f5" stop-opacity="0" />
+        </linearGradient>
+        <linearGradient id="trPeachFlow" x1="100%" y1="20%" x2="50%" y2="50%">
+          <stop offset="0%" stop-color="#fecdd3" stop-opacity="0.35" />
+          <stop offset="60%" stop-color="#e9d5ff" stop-opacity="0.2" />
+          <stop offset="100%" stop-color="#faf8f5" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+      <path d="M-50,-50 C250,-20 350,180 200,380 C100,520 -50,450 -50,450 Z" fill="url(#tlFlow)" />
+      <path d="M-80,600 C150,620 280,720 260,950 L-80,950 Z" fill="url(#blRoseFlow)" />
+      <path d="M1500,100 C1280,180 1250,380 1380,550 C1450,650 1520,700 1520,700 Z" fill="url(#trPeachFlow)" />
+    </svg>
+  </div>
+
+  <div class="app-container">
+
+    <!-- =========================================================================
+         2. Top Floating Navigation Bar
+         ========================================================================= -->
+    <header class="navbar">
+      <!-- Left: Small Quellum Q Logo with corrected Pink-to-Orange/Yellow gradient -->
+      <a href="#home" class="nav-brand" title="Quellum" id="navLogoBtn">
+        <svg class="q-logo-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="qPinkOrangeYellow" x1="10%" y1="10%" x2="90%" y2="90%">
+              <stop offset="0%" stop-color="#ec4899" />
+              <stop offset="30%" stop-color="#f43f5e" />
+              <stop offset="70%" stop-color="#f97316" />
+              <stop offset="100%" stop-color="#fbbf24" />
+            </linearGradient>
+            <linearGradient id="qTailGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#f43f5e" />
+              <stop offset="100%" stop-color="#f59e0b" />
+            </linearGradient>
+          </defs>
+          <circle cx="46" cy="46" r="30" stroke="url(#qPinkOrangeYellow)" stroke-width="14" stroke-linecap="round" />
+          <path d="M58 58 L78 78" stroke="url(#qTailGrad)" stroke-width="14" stroke-linecap="round" />
+        </svg>
+      </a>
+
+      <!-- Center: Navigation Tabs (Home, Workspace, History) -->
+      <nav class="nav-links">
+        <!-- Home (Active) -->
+        <a href="#home" class="nav-link-btn" id="navHomeBtn">
+          <div class="btn-content">
+            <!-- Home outline icon -->
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              <polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+            <span>Home</span>
+          </div>
+          <div class="nav-active-bar" id="homeActiveIndicator"></div>
+        </a>
+
+        <!-- Workspace -->
+        <a href="#workspace" class="nav-link-btn inactive" id="navWorkspaceBtn">
+          <div class="btn-content">
+            <!-- Folder outline icon -->
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+            </svg>
+            <span>Workspace</span>
+          </div>
+          <div class="nav-active-bar" id="workspaceActiveIndicator" style="display: none;"></div>
+        </a>
+
+        <!-- History -->
+        <a href="#history" class="nav-link-btn inactive" id="navHistoryBtn">
+          <div class="btn-content">
+            <!-- Clock outline icon -->
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span>History</span>
+          </div>
+          <div class="nav-active-bar" id="historyActiveIndicator" style="display: none;"></div>
+        </a>
+      </nav>
+
+      <!-- Right: Theme Toggle Icon -->
+      <button class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle theme" title="Toggle theme">
+        <!-- Sun outline icon -->
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2"/>
+          <path d="M12 20v2"/>
+          <path d="m4.93 4.93 1.41 1.41"/>
+          <path d="m17.66 17.66 1.41 1.41"/>
+          <path d="M2 12h2"/>
+          <path d="M20 12h2"/>
+          <path d="m6.34 17.66-1.41 1.41"/>
+          <path d="m19.07 4.93-1.41 1.41"/>
+        </svg>
+      </button>
+    </header>
+
+    <!-- =========================================================================
+         3. Main Content Wrapper
+         ========================================================================= -->
+    <main style="position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-grow: 1;">
+
+      <!-- =======================================================================
+           Home Page View
+           ======================================================================= -->
+      <div id="homeView" style="position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-grow: 1;">
+
+        <!-- Floating Illustrations & Handwritten Annotations -->
+      <div class="illustrations-container">
+        
+        <!-- Upper-Left: Stacked Documents, Highlights, Floating Pills & Ink Arrow -->
+        <div class="illust-upper-left anim-float-1">
+          <div class="doc-back"></div>
+          <div class="doc-card doc-front">
+            <span class="pdf-badge">PDF</span>
+            <div class="line w-full"></div>
+            <div class="line w-80"></div>
+            <!-- Highlighted Yellow Passage 1 -->
+            <div class="highlight-yellow">
+              <div class="line w-full"></div>
+            </div>
+            <!-- Highlighted Yellow Passage 2 -->
+            <div class="highlight-yellow">
+              <div class="line w-80"></div>
+            </div>
+            <div class="line w-70"></div>
+            <div class="line w-60"></div>
+          </div>
+
+          <!-- Floating Pill: Key findings -->
+          <div class="floating-pill" style="position: absolute; top: -14px; right: -18px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>
+            </svg>
+            <span>Key findings</span>
+          </div>
+
+          <!-- Floating Pill: Tables & charts -->
+          <div class="floating-pill" style="position: absolute; bottom: 18px; right: -32px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d946ef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 3v18h18"/>
+              <rect width="4" height="7" x="7" y="10" rx="1"/>
+              <rect width="4" height="12" x="15" y="5" rx="1"/>
+            </svg>
+            <span>Tables & charts</span>
+          </div>
+
+          <!-- Curved ink arrow pointing to document -->
+          <div style="position: absolute; bottom: -30px; right: 28px; width: 56px; height: 38px;">
+            <svg viewBox="0 0 60 40" fill="none" style="width: 100%; height: 100%; opacity: 0.7;">
+              <path d="M10 32 C 25 38, 48 25, 42 10" stroke="#6366f1" stroke-width="2" stroke-linecap="round" />
+              <path d="M36 12 L 42 10 L 44 17" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Upper-Right: Handwritten "Better evidence. More reliable answers." -->
+        <div class="note-upper-right anim-float-1">
+          <p class="font-handwriting note-text-blue">
+            Better evidence.<br>More reliable answers.
+          </p>
+          <!-- Pink-to-orange curved underline flourish -->
+          <svg width="195" height="24" viewBox="0 0 195 24" fill="none" style="margin-top: 3px;">
+            <defs>
+              <linearGradient id="betterUnderlineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#ec4899" />
+                <stop offset="50%" stop-color="#f43f5e" />
+                <stop offset="100%" stop-color="#f97316" />
+              </linearGradient>
+            </defs>
+            <path d="M4 10 C 65 22, 140 4, 188 12" stroke="url(#betterUnderlineGrad)" stroke-width="2.6" stroke-linecap="round" />
+          </svg>
+        </div>
+
+        <!-- Upper-Right: Analyzing answer... Card & Source pill -->
+        <div class="illust-upper-right anim-float-2">
+          <div class="doc-card" style="position: relative;">
+            <div class="card-header-flex">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>
+              </svg>
+              <span>Analyzing answer...</span>
+            </div>
+            
+            <div class="line sm w-full"></div>
+            <div class="line sm w-80"></div>
+
+            <!-- Highlighted Pink sentence bar -->
+            <div class="highlight-rose">
+              <div class="line sm w-full" style="background-color: rgba(244, 63, 94, 0.45);"></div>
+            </div>
+
+            <!-- Potential hallucination alert badge -->
+            <div class="alert-hallucination">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              <span>Potential hallucination</span>
+            </div>
+
+            <!-- Overlapping Source Page 4 tag -->
+            <div class="source-tag-side">
+              <div class="row-label">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>
+                </svg>
+                <span>Source</span>
+              </div>
+              <div class="row-val">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                <span>Page 4</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Curved ink arrow pointing down-left -->
+          <div style="position: absolute; bottom: -28px; right: 40px; width: 56px; height: 38px;">
+            <svg viewBox="0 0 60 40" fill="none" style="width: 100%; height: 100%; opacity: 0.7;">
+              <path d="M50 8 C 45 28, 25 36, 12 30" stroke="#6366f1" stroke-width="2" stroke-linecap="round" />
+              <path d="M18 24 L 12 30 L 20 34" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Lower-Left: Handwritten "Ground every answer." -->
+        <div class="note-lower-left anim-float-2">
+          <p class="font-handwriting note-text-blue" style="font-size: 1.7rem; line-height: 1.15;">
+            Ground<br>every answer.
+          </p>
+          <!-- Pink-to-orange curved underline -->
+          <svg width="130" height="22" viewBox="0 0 130 22" fill="none" style="margin-top: 3px;">
+            <defs>
+              <linearGradient id="groundUnderlineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#ec4899" />
+                <stop offset="60%" stop-color="#f43f5e" />
+                <stop offset="100%" stop-color="#f97316" />
+              </linearGradient>
+            </defs>
+            <path d="M4 8 C 40 18, 85 4, 124 10" stroke="url(#groundUnderlineGrad)" stroke-width="2.4" stroke-linecap="round" />
+          </svg>
+        </div>
+
+        <!-- Lower-Left: Source context Card -->
+        <div class="illust-lower-left anim-float-1">
+          <div class="doc-card">
+            <div class="card-header-flex" style="margin-bottom: 10px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              <span>Source context</span>
+            </div>
+            <div class="highlight-blue" style="width: 85%;"></div>
+            <div class="highlight-blue" style="width: 70%;"></div>
+          </div>
+        </div>
+
+        <!-- Lower-Right: Overlapping Documents & 3D Vector Magnifying Glass -->
+        <div class="illust-lower-right anim-float-1">
+          <div class="doc-back"></div>
+          <div class="doc-card doc-front">
+            <div class="line w-full" style="margin-top: 6px;"></div>
+            <div class="line w-80"></div>
+            <div class="line w-70"></div>
+            <!-- Highlighted Yellow Lines -->
+            <div class="highlight-yellow">
+              <div class="line w-full"></div>
+            </div>
+            <div class="highlight-yellow">
+              <div class="line w-80"></div>
+            </div>
+            <div class="line w-full"></div>
+            <div class="line w-60"></div>
+
+            <!-- 3D Magnifying Glass SVG placed over the document -->
+            <div class="magnifying-svg-wrapper">
+              <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: 100%;">
+                <defs>
+                  <linearGradient id="lensRimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#60a5fa" />
+                    <stop offset="50%" stop-color="#2563eb" />
+                    <stop offset="100%" stop-color="#1d4ed8" />
+                  </linearGradient>
+                  <linearGradient id="glassHandleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#3b82f6" />
+                    <stop offset="100%" stop-color="#1e3a8a" />
+                  </linearGradient>
+                  <linearGradient id="lensReflectGrad" x1="20%" y1="20%" x2="80%" y2="80%">
+                    <stop offset="0%" stop-color="#ffffff" stop-opacity="0.6" />
+                    <stop offset="40%" stop-color="#ffffff" stop-opacity="0.1" />
+                    <stop offset="100%" stop-color="#93c5fd" stop-opacity="0.25" />
+                  </linearGradient>
+                </defs>
+                <!-- Handle pointing down-right -->
+                <rect x="62" y="62" width="11" height="34" rx="5.5" transform="rotate(-45 62 62)" fill="url(#glassHandleGrad)" stroke="#1e40af" stroke-width="1.5" />
+                <!-- Glass Lens Interior -->
+                <circle cx="42" cy="42" r="24" fill="url(#lensReflectGrad)" />
+                <!-- Rim -->
+                <circle cx="42" cy="42" r="24" stroke="url(#lensRimGrad)" stroke-width="6" />
+                <!-- Specular Highlight Arc -->
+                <path d="M26 36 C 26 27, 33 20, 42 20" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.8" />
+              </svg>
+            </div>
+
+            <!-- Blue spark rays -->
+            <div class="spark-rays">
+              <svg viewBox="0 0 30 30" fill="none" style="width: 100%; height: 100%;">
+                <path d="M15 4 L 15 10" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" />
+                <path d="M6 12 L 12 15" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" />
+                <path d="M8 24 L 14 20" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- =======================================================================
+           5. Central Hero Section
+           ======================================================================= -->
+      <section class="hero-section">
+        <div class="hero-wordmark-wrapper">
+          
+          <!-- Left flowing decorative curves -->
+          <div class="hero-curve-left">
+            <svg viewBox="0 0 140 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: 100%;">
+              <defs>
+                <linearGradient id="heroLeftCurve1" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.3" />
+                  <stop offset="60%" stop-color="#38bdf8" stop-opacity="0.9" />
+                  <stop offset="100%" stop-color="#818cf8" stop-opacity="0.95" />
+                </linearGradient>
+                <linearGradient id="heroLeftCurve2" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#818cf8" stop-opacity="0.2" />
+                  <stop offset="50%" stop-color="#a855f7" stop-opacity="0.8" />
+                  <stop offset="100%" stop-color="#c084fc" stop-opacity="0.9" />
+                </linearGradient>
+              </defs>
+              <path d="M10 24 C45 28 80 10 135 18" stroke="url(#heroLeftCurve1)" stroke-width="2" stroke-linecap="round" />
+              <path d="M30 32 C65 34 95 18 138 24" stroke="url(#heroLeftCurve2)" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+          </div>
+
+          <!-- Large Quellum Wordmark -->
+          <h1 class="quellum-title">Quellum</h1>
+
+          <!-- Right flowing decorative curves -->
+          <div class="hero-curve-right">
+            <svg viewBox="0 0 140 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: 100%;">
+              <defs>
+                <linearGradient id="heroRightCurve1" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#ec4899" stop-opacity="0.95" />
+                  <stop offset="50%" stop-color="#f43f5e" stop-opacity="0.9" />
+                  <stop offset="100%" stop-color="#fb7185" stop-opacity="0.3" />
+                </linearGradient>
+                <linearGradient id="heroRightCurve2" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#f43f5e" stop-opacity="0.9" />
+                  <stop offset="60%" stop-color="#f97316" stop-opacity="0.85" />
+                  <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.25" />
+                </linearGradient>
+              </defs>
+              <path d="M5 18 C55 10 95 28 130 20" stroke="url(#heroRightCurve1)" stroke-width="2" stroke-linecap="round" />
+              <path d="M3 25 C45 20 80 34 115 30" stroke="url(#heroRightCurve2)" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+          </div>
+
+        </div>
+
+        <h2 class="hero-heading">A Hallucination Aware RAG</h2>
+        <p class="hero-subtitle">
+          Upload a document or paste text to check how well an answer is supported by the available evidence.
+        </p>
+      </section>
+
+      <!-- =======================================================================
+           6. Main Upload and Paste-Text Panel
+           ======================================================================= -->
+      <section class="upload-panel-wrapper">
+        <div class="upload-panel">
+          
+          <!-- Top Segmented Switch -->
+          <div class="segmented-wrapper">
+            <div class="segmented-control" role="tablist" aria-label="Input options">
+              <button class="segmented-tab active" id="tabUploadBtn" type="button" role="tab" aria-selected="true">
+                <!-- Upload-cloud outline icon -->
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>
+                  <path d="M12 12v9"/>
+                  <path d="m16 16-4-4-4 4"/>
+                </svg>
+                <span>Upload PDF</span>
+              </button>
+
+              <button class="segmented-tab" id="tabPasteBtn" type="button" role="tab" aria-selected="false">
+                <!-- Document outline icon -->
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <span>Paste Text</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Hidden Native File Input -->
+          <input type="file" id="pdfFileInput" accept=".pdf,application/pdf" style="display: none;">
+
+          <!-- Dual Column Grid Layout matching the reference -->
+          <div class="panel-grid">
+            
+            <!-- Left Half: Upload PDF Dropzone -->
+            <div class="dropzone-box" id="dropzoneBox">
+              <div class="dropzone-icon">
+                <svg id="cloudIconSvg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>
+                  <path d="M12 12v9"/>
+                  <path d="m16 16-4-4-4 4"/>
+                </svg>
+              </div>
+
+              <h3 class="dropzone-heading" id="dropzoneTitle">Upload a PDF</h3>
+              <p class="dropzone-subtext" id="dropzoneDesc">Check answers against the contents of your document.</p>
+
+              <!-- Selected File Chip (Hidden until selected) -->
+              <div class="file-chip" id="selectedFileChip" style="display: none;">
+                <div class="file-chip-left">
+                  <span class="pdf-badge" style="margin-bottom: 0; font-size: 9px; padding: 1px 5px;">PDF</span>
+                  <span class="file-chip-name" id="fileNameLabel">document.pdf</span>
+                </div>
+                <button type="button" class="file-chip-remove" id="removeFileBtn" title="Remove file">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+
+              <button type="button" class="btn-quellum-gradient" id="choosePdfBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>
+                  <path d="M12 12v9"/>
+                  <path d="m16 16-4-4-4 4"/>
+                </svg>
+                <span id="choosePdfBtnText">Choose PDF</span>
+              </button>
+
+              <span class="dropzone-helper">PDF only · Max file size 20 MB</span>
+            </div>
+
+            <!-- Center Divider with "or" Badge -->
+            <div class="divider-or-col" id="homeDividerOr">
+              <div class="divider-line"></div>
+              <span class="or-pill">or</span>
+            </div>
+
+            <!-- Right Half: Paste Text Area -->
+            <div class="paste-box" id="pasteBox">
+              <div>
+                <div class="paste-header-row">
+                  <div class="paste-title-group">
+                    <div class="paste-icon">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                      </svg>
+                    </div>
+                    <h3 class="paste-title">Paste Text</h3>
+                  </div>
+
+                  <!-- Try Sample Text button -->
+                  <button type="button" class="try-sample-btn" id="trySampleBtn">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>
+                    </svg>
+                    <span>Try sample</span>
+                  </button>
+                </div>
+
+                <p class="paste-subtext">Check a passage, an answer, or any text you want to review.</p>
+
+                <textarea class="paste-textarea" id="pasteInput" placeholder="Paste your text here to check it against the evidence..."></textarea>
+              </div>
+
+              <div class="paste-footer-row">
+                <span class="word-count-label" id="wordCountLabel">Evidence check ready</span>
+
+                <button type="button" class="btn-quellum-gradient" id="analyzeTextBtn">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"/>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                  </svg>
+                  <span id="analyzeTextBtnLabel">Analyze Text</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </section>
+
+      <!-- =======================================================================
+           7. Bottom Feature Row
+           ======================================================================= -->
+      <section class="feature-section">
+        <div class="feature-grid">
+          
+          <!-- Column 1: Hallucination Detection -->
+          <div class="feature-item">
+            <div class="feature-icon-badge badge-blue">
+              <!-- Shield Outline Icon -->
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+            </div>
+            <h4 class="feature-title">Hallucination Detection</h4>
+            <p class="feature-desc">Flags sentences that may not be supported by the source.</p>
+          </div>
+
+          <!-- Column 2: Evidence Grounding -->
+          <div class="feature-item">
+            <div class="feature-icon-badge badge-purple">
+              <!-- Document Outline Icon -->
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            </div>
+            <h4 class="feature-title">Evidence Grounding</h4>
+            <p class="feature-desc">Connects answers to relevant document passages.</p>
+          </div>
+
+          <!-- Column 3: Sentence-Level Review -->
+          <div class="feature-item">
+            <div class="feature-icon-badge badge-amber">
+              <!-- Search Outline Icon -->
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+            </div>
+            <h4 class="feature-title">Sentence-Level Review</h4>
+            <p class="feature-desc">Helps you inspect potentially unreliable statements.</p>
+          </div>
+
+          <!-- Column 4: Clear Findings -->
+          <div class="feature-item">
+            <div class="feature-icon-badge badge-mint">
+              <!-- Bulls-eye Target Outline Icon -->
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <circle cx="12" cy="12" r="6"/>
+                <circle cx="12" cy="12" r="2"/>
+              </svg>
+            </div>
+            <h4 class="feature-title">Clear Findings</h4>
+            <p class="feature-desc">See source references and understand what needs a closer look.</p>
+          </div>
+
+        </div> <!-- end of feature-grid -->
+      </section> <!-- end of feature-section -->
+
+    </div> <!-- end of homeView -->
+
+      <!-- =======================================================================
+           Workspace Page View (Two-Panel Layout matching specification)
+           ======================================================================= -->
+      <div id="workspaceView" class="workspace-wrapper" style="display: none;">
+        <div class="workspace-grid">
+          
+          <!-- ===================================================================
+               LEFT PANEL: Document Source & Preview (50%)
+               =================================================================== -->
+          <div class="workspace-panel" id="wsLeftPanel">
+            
+            <!-- A. Document Preview Header (Visible when document is loaded) -->
+            <div class="panel-header-bar" id="wsPreviewHeader" style="display: none;">
+              <div class="doc-title-row">
+                <span class="badge-pdf-red" id="wsDocBadge">PDF</span>
+                <span class="doc-name-text" id="wsDocTitle">sample_document.pdf</span>
+              </div>
+              <button class="icon-btn-ghost" id="wsCloseDocBtn" title="Change or remove document">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+
+            <!-- Sub-Toolbar (Visible when document is loaded) -->
+            <div class="panel-sub-toolbar" id="wsPreviewToolbar" style="display: none;">
+              <div class="toolbar-left-group">
+                <span class="pill-preview-active" id="wsPreviewPill">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/></svg>
+                  <span id="wsPreviewModeLabel">Document Preview</span>
+                </span>
+                <button class="pill-btn-outline" id="wsUploadNewBtn" type="button">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>
+                  <span id="wsUploadNewBtnText">Upload New</span>
+                </button>
+              </div>
+              <div class="page-count-dropdown" id="wsPageCountBadge">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+                <span id="wsPageCountLabel">Pages: 4</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+            </div>
+
+            <!-- B. Document Preview Body (Visible when document is loaded) -->
+            <div class="doc-viewer-grid" id="wsPreviewBody" style="display: none;">
+              <!-- Thumbnails Sidebar (Left) -->
+              <div class="doc-thumbnails-col" id="wsThumbnailsList">
+                <!-- Dynamically populated or rendered thumbnails -->
+              </div>
+
+              <!-- Main Document Viewport (Right) -->
+              <div class="doc-viewport-col">
+                <!-- Floating Zoom Toolbar -->
+                <div class="doc-floating-toolbar">
+                  <button class="zoom-btn" id="wsZoomOutBtn" title="Zoom Out" type="button">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                  </button>
+                  <button class="zoom-btn" id="wsZoomInBtn" title="Zoom In" type="button">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                  </button>
+                  <span style="font-size: 12px; font-weight: 600; color: #475569; padding: 0 4px;" id="wsZoomLabel">100%</span>
+                  <button class="zoom-btn" id="wsFitWidthBtn" title="Fit to width" type="button">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                  </button>
+                </div>
+
+                <!-- Scrollable Document Pages Area -->
+                <div class="doc-scroll-area" id="wsDocScrollArea">
+                  <div id="wsPagesContainer" style="width: 100%; display: flex; flex-direction: column; align-items: center; gap: 24px;"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- C. Initial Document Empty State (Visible when NO document is loaded) -->
+            <input type="file" id="wsFileInput" accept=".pdf,application/pdf" style="display: none;">
+
+            <div class="ws-empty-doc-container" id="wsInitialInputState">
+              
+              <div class="ws-empty-center-card">
+
+                <!-- 1. Illustration ALWAYS at the top, ABOVE the switch -->
+                <div class="ws-hero-illustration-box">
+                  <div class="ws-illustration-ambient-aura"></div>
+                  
+                  <svg class="ws-floating-doc-svg" width="200" height="150" viewBox="0 0 240 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                      <filter id="wsHeroDocShadow" x="20" y="10" width="160" height="170" filterUnits="userSpaceOnUse">
+                        <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.08" />
+                      </filter>
+                      <filter id="wsLensGlow" x="90" y="70" width="90" height="90" filterUnits="userSpaceOnUse">
+                        <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#0284c7" flood-opacity="0.18" />
+                      </filter>
+                      <linearGradient id="wsQBadgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#00d2ff"/>
+                        <stop offset="50%" stop-color="#7c3aed"/>
+                        <stop offset="100%" stop-color="#f43f5e"/>
+                      </linearGradient>
+                    </defs>
+
+                    <!-- Delicate Floating paper tag on upper-left -->
+                    <g transform="rotate(-16 35 30)">
+                      <rect x="20" y="18" width="34" height="24" rx="5" fill="#fdf2f8" stroke="#fbcfe8" stroke-width="1.2" />
+                      <line x1="26" y1="26" x2="44" y2="26" stroke="#f472b6" stroke-width="1.5" stroke-linecap="round" />
+                      <line x1="26" y1="32" x2="38" y2="32" stroke="#fbcfe8" stroke-width="1.5" stroke-linecap="round" />
+                    </g>
+
+                    <!-- Back Page 1 (tilted left, soft lavender pastel accent) -->
+                    <g transform="rotate(-9 80 85)">
+                      <rect x="30" y="16" width="94" height="122" rx="12" fill="#faf8f5" stroke="#e2e8f0" stroke-width="1.5" />
+                      <!-- subtle page lines -->
+                      <line x1="44" y1="34" x2="80" y2="34" stroke="#cbd5e1" stroke-width="2.5" stroke-linecap="round" />
+                      <line x1="44" y1="46" x2="106" y2="46" stroke="#e2e8f0" stroke-width="2" stroke-linecap="round" />
+                      <line x1="44" y1="56" x2="98" y2="56" stroke="#e2e8f0" stroke-width="2" stroke-linecap="round" />
+                      <line x1="44" y1="66" x2="102" y2="66" stroke="#e2e8f0" stroke-width="2" stroke-linecap="round" />
+                      <line x1="44" y1="76" x2="88" y2="76" stroke="#e2e8f0" stroke-width="2" stroke-linecap="round" />
+                    </g>
+
+                    <!-- Back Page 2 (tilted right, soft cyan pastel accent) -->
+                    <g transform="rotate(7 130 90)">
+                      <rect x="80" y="18" width="94" height="122" rx="12" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5" />
+                      <!-- subtle page lines with cyan highlight -->
+                      <line x1="94" y1="34" x2="130" y2="34" stroke="#0ea5e9" stroke-width="2.5" stroke-linecap="round" />
+                      <rect x="94" y="44" width="62" height="7" rx="3.5" fill="#bae6fd" fill-opacity="0.65" />
+                      <line x1="94" y1="60" x2="156" y2="60" stroke="#e2e8f0" stroke-width="2" stroke-linecap="round" />
+                      <line x1="94" y1="70" x2="148" y2="70" stroke="#e2e8f0" stroke-width="2" stroke-linecap="round" />
+                      <line x1="94" y1="80" x2="138" y2="80" stroke="#e2e8f0" stroke-width="2" stroke-linecap="round" />
+                    </g>
+
+                    <!-- Front Hero Page (crisp clean white, rich highlighted lines, shadow) -->
+                    <g filter="url(#wsHeroDocShadow)" transform="rotate(-1 100 85)">
+                      <rect x="48" y="20" width="104" height="132" rx="13" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5" />
+                      
+                      <!-- Top Document Pill / Accent -->
+                      <rect x="60" y="32" width="38" height="5" rx="2.5" fill="#0f172a" />
+                      <rect x="136" y="28" width="6" height="6" rx="3" fill="url(#wsQBadgeGrad)" />
+
+                      <!-- Highlighted Line 1: Soft Yellow / Amber highlight -->
+                      <rect x="60" y="45" width="76" height="9" rx="4.5" fill="#fef08a" fill-opacity="0.9" />
+                      <line x1="64" y1="49.5" x2="128" y2="49.5" stroke="#334155" stroke-width="2.2" stroke-linecap="round" />
+
+                      <!-- Highlighted Line 2: Soft Cyan highlight -->
+                      <rect x="60" y="60" width="62" height="9" rx="4.5" fill="#bae6fd" fill-opacity="0.85" />
+                      <line x1="64" y1="64.5" x2="114" y2="64.5" stroke="#334155" stroke-width="2.2" stroke-linecap="round" />
+
+                      <!-- Neutral text line -->
+                      <line x1="60" y1="77" x2="136" y2="77" stroke="#cbd5e1" stroke-width="2.2" stroke-linecap="round" />
+
+                      <!-- Highlighted Line 3: Soft Lavender highlight -->
+                      <rect x="60" y="87" width="70" height="9" rx="4.5" fill="#e9d5ff" fill-opacity="0.85" />
+                      <line x1="64" y1="91.5" x2="122" y2="91.5" stroke="#334155" stroke-width="2.2" stroke-linecap="round" />
+
+                      <!-- Highlighted Line 4: Soft Rose / Pink highlight -->
+                      <rect x="60" y="102" width="54" height="9" rx="4.5" fill="#fbcfe8" fill-opacity="0.8" />
+                      <line x1="64" y1="106.5" x2="106" y2="106.5" stroke="#334155" stroke-width="2.2" stroke-linecap="round" />
+
+                      <!-- Bottom faint line -->
+                      <line x1="60" y1="121" x2="118" y2="121" stroke="#e2e8f0" stroke-width="2" stroke-linecap="round" />
+                    </g>
+
+                    <!-- Magnifying Glass (overlapping front document) -->
+                    <g transform="translate(122, 92)" filter="url(#wsLensGlow)">
+                      <!-- Outer Glass Glow -->
+                      <circle cx="24" cy="24" r="21" fill="#eff6ff" fill-opacity="0.75" />
+                      <!-- Lens Glass Ring -->
+                      <circle cx="24" cy="24" r="21" stroke="#1e293b" stroke-width="3" />
+                      <!-- Internal highlight arc / glint -->
+                      <path d="M14 17 A17 17 0 0 1 29 9" stroke="#38bdf8" stroke-width="2.4" stroke-linecap="round" stroke-opacity="0.9" />
+                      <!-- Internal verified evidence check / focal point -->
+                      <path d="M17 24 L22 29 L31 19" stroke="#059669" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+                      <!-- Handle (dark charcoal, premium angle) -->
+                      <line x1="39" y1="39" x2="59" y2="59" stroke="#111827" stroke-width="5" stroke-linecap="round" />
+                      <line x1="42" y1="42" x2="45" y2="45" stroke="#64748b" stroke-width="2.5" stroke-linecap="round" />
+                    </g>
+
+                    <!-- Floating Sparkle Accents (Quellum visual identity) -->
+                    <path d="M208 42 L211 48 L217 51 L211 54 L208 60 L205 54 L199 51 L205 48 Z" fill="#38bdf8" fill-opacity="0.85" />
+                    <path d="M24 126 L26 130 L30 132 L26 134 L24 138 L22 134 L18 132 L22 130 Z" fill="#c084fc" fill-opacity="0.85" />
+                  </svg>
+                </div>
+
+                <!-- 2. Segmented Control Switch: directly below illustration -->
+                <div class="ws-segmented-wrapper">
+                  <div class="segmented-control" role="tablist" aria-label="Workspace input options">
+                    <button class="segmented-tab active" id="wsTabUploadBtn" type="button" role="tab" aria-selected="true">
+                      <!-- Upload-cloud outline icon -->
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>
+                        <path d="M12 12v9"/>
+                        <path d="m16 16-4-4-4 4"/>
+                      </svg>
+                      <span>Upload PDF</span>
+                    </button>
+
+                    <button class="segmented-tab" id="wsTabPasteBtn" type="button" role="tab" aria-selected="false">
+                      <!-- Document outline icon -->
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                      </svg>
+                      <span>Paste Text</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 3. Dynamic Tab Content below the switch -->
+                <!-- Tab 1: Upload PDF -->
+                <div class="ws-tab-content" id="wsUploadTabView">
+                  <h3 class="ws-empty-heading">Upload a PDF</h3>
+
+                  <!-- Spacious, visually appealing PDF drop zone -->
+                  <div class="ws-dropzone-box" id="wsDropzoneBox">
+                    <div class="ws-dropzone-icon">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>
+                        <path d="M12 12v9"/>
+                        <path d="m16 16-4-4-4 4"/>
+                      </svg>
+                    </div>
+
+                    <p class="ws-dropzone-prompt">Drag &amp; drop your PDF here, or browse</p>
+
+                    <button type="button" class="btn-charcoal-primary" id="wsChoosePdfBtn">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>
+                        <path d="M12 12v9"/>
+                        <path d="m16 16-4-4-4 4"/>
+                      </svg>
+                      <span>Choose PDF</span>
+                    </button>
+
+                    <span class="ws-dropzone-helper">PDF only · Max file size 20 MB</span>
+                  </div>
+                </div>
+
+                <!-- Tab 2: Paste Text -->
+                <div class="ws-tab-content" id="wsPasteTabView" style="display: none;">
+                  <div class="ws-paste-form-wrap">
+                    <textarea id="wsPasteTextarea" class="paste-textarea ws-spacious-textarea" placeholder="Paste your source text here…"></textarea>
+                    
+                    <div class="ws-paste-footer-row">
+                      <span class="ws-paste-hint" id="wsPasteHint">Passages, transcripts, or notes</span>
+                      <button type="button" class="btn-charcoal-primary" id="wsUseTextBtn">
+                        <span>Use This Text</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+          <!-- ===================================================================
+               RIGHT PANEL: LLM Chat ("Ask Anything") (50%)
+               =================================================================== -->
+          <div class="workspace-panel" id="wsRightPanel">
+            
+            <!-- Chat Header -->
+            <div class="chat-panel-header">
+              <div class="chat-title-group">
+                <div class="chat-spark-bubble-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  </svg>
+                </div>
+                <div>
+                  <h3 class="chat-title-text">Ask Anything</h3>
+                  <p class="chat-subtext-text">Ask questions about your document, and get instant answers with evidence.</p>
+                </div>
+              </div>
+              <button class="icon-btn-ghost" id="wsClearChatBtn" title="Clear conversation" type="button">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              </button>
+            </div>
+
+            <!-- Chat Body (Messages / Empty State) -->
+            <div class="chat-body-container" id="wsChatBody">
+              
+              <!-- Empty State: Before first question -->
+              <div class="chat-empty-state-wrap" id="wsChatEmptyState">
+                <div class="ws-chat-empty-icon-badge">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                    <line x1="8" y1="10" x2="16" y2="10"/>
+                    <line x1="8" y1="14" x2="13" y2="14"/>
+                  </svg>
+                </div>
+
+                <h4 class="ws-chat-empty-heading">What would you like to know?</h4>
+                <p class="ws-chat-empty-subtext">Add a source, then ask a question to explore it with Quellum.</p>
+              </div>
+
+              <!-- Message Thread (Hidden until first question) -->
+              <div class="chat-thread-list" id="wsChatThreadList" style="display: none;"></div>
+
+            </div>
+
+            <!-- Chat Input (Anchored at Bottom) -->
+            <div class="chat-input-bottom-wrap">
+              <div class="chat-input-card">
+                <textarea 
+                  class="chat-textarea" 
+                  id="wsChatTextarea" 
+                  rows="2" 
+                  placeholder="Ask a question about your document..."
+                ></textarea>
+                
+                <div class="chat-input-actions-row">
+                  <div class="chat-input-left-tools">
+                    <button class="icon-btn-ghost" id="wsAttachBtn" title="Attach context" type="button" style="padding: 4px;">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                    </button>
+                    <div class="source-ref-chip" id="wsChatSourceChip">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+                      <span id="wsChatSourceLabel">Upload PDF or Paste Text</span>
+                    </div>
+                  </div>
+
+                  <button class="chat-send-btn" id="wsChatSendBtn" type="button" title="Send question">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+
+      <!-- =======================================================================
+           History Page View (Two-Panel Layout matching reference image)
+           ======================================================================= -->
+      <div id="historyView" class="history-wrapper" style="display: none;">
+        
+        <!-- Top History Page Header -->
+        <div class="history-header">
+          <div class="history-header-left">
+            <h1 class="history-title">Your History</h1>
+            <p class="history-subtitle">Revisit your conversations, documents, and insights.</p>
+            <p class="history-retention-note">Conversations are saved temporarily and automatically deleted after 30 days of inactivity.</p>
+          </div>
+          <div class="history-header-right">
+            <div class="history-search-bar">
+              <svg class="history-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input type="text" id="historySearchInput" class="history-search-input" placeholder="Search by title, document or message..." autocomplete="off">
+              <button id="historySearchClearBtn" class="history-search-clear" style="display: none;" title="Clear search" type="button">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <button id="historyNewChatBtn" class="history-new-chat-btn" type="button" title="Start a fresh conversation in Workspace">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              <span>New Chat</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- History Main Two-Panel Grid (35% Left, 65% Right) -->
+        <div class="history-grid">
+          
+          <!-- Left Panel: Previous Conversations (35%) -->
+          <div class="history-panel history-left-panel" id="historyLeftPanel">
+            <div class="history-list-scroll" id="historyListScroll">
+              <!-- Dynamically populated grouped conversation list -->
+            </div>
+          </div>
+
+          <!-- Right Panel: Selected RAG Conversation Preview (65%) -->
+          <div class="history-panel history-right-panel" id="historyRightPanel">
+            <!-- Dynamic Content Container -->
+            <div id="historyDetailContent" class="history-detail-content">
+              <!-- Conversation Header -->
+              <div class="history-detail-header" id="historyDetailHeader">
+                <div class="history-detail-meta-left">
+                  <button id="historyMobileBackBtn" class="history-mobile-back-btn" title="Back to conversations" type="button">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="19" y1="12" x2="5" y2="12"/>
+                      <polyline points="12 19 5 12 12 5"/>
+                    </svg>
+                  </button>
+                  <div class="history-detail-badge" id="historyDetailBadge">
+                    <!-- Icon dynamically injected -->
+                  </div>
+                  <div class="history-detail-info">
+                    <h2 class="history-detail-title" id="historyDetailTitle">Introduction to Machine Learning</h2>
+                    <div class="history-detail-submeta">
+                      <span class="submeta-item" id="historyDetailDoc">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+                        <span id="historyDetailDocName">machine_learning.pdf</span>
+                      </span>
+                      <span class="submeta-item" id="historyDetailDate">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        <span id="historyDetailDateText">Aug 21, 2026</span>
+                      </span>
+                      <span class="submeta-item" id="historyDetailTime">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        <span id="historyDetailTimeText">2:14 PM</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="history-detail-actions-right">
+                  <button id="historyOpenInWorkspaceBtn" class="history-open-workspace-btn" type="button" title="Open this conversation in Workspace">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                      <polyline points="15 3 21 3 21 9"/>
+                      <line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                    <span>Open in Workspace</span>
+                  </button>
+                  <div class="history-dropdown-wrap">
+                    <button id="historyHeaderMoreBtn" class="history-header-more-btn icon-btn-ghost" type="button" title="More options">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                    </button>
+                    <div id="historyHeaderMenu" class="history-popover-menu" style="display: none;">
+                      <button id="historyHeaderRenameBtn" class="history-popover-item" type="button">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                        <span>Rename</span>
+                      </button>
+                      <button id="historyHeaderDeleteBtn" class="history-popover-item danger" type="button">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Messages List Container (Scrollable, full height - No chat input per requirement #8) -->
+              <div class="history-messages-container" id="historyMessagesContainer">
+                <!-- Messages rendered dynamically -->
+              </div>
+            </div>
+
+            <!-- Empty Detail State (When no conversation is selected or list is empty) -->
+            <div id="historyDetailEmptyState" class="history-detail-empty-state" style="display: none;">
+              <div class="history-empty-icon-box">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="1.8">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+              </div>
+              <h3 class="history-empty-title">Select a conversation</h3>
+              <p class="history-empty-subtitle">Choose a saved session from the left panel to review questions, answers, and source citations.</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </main>
+
+  </div>
+
+  <!-- =========================================================================
+       8. Modals (Vanilla JavaScript Overlays)
+       ========================================================================= -->
+
+  <!-- 8.1 Analysis Results Modal -->
+  <div class="modal-overlay" id="analysisModal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <path d="m9 12 2 2 4-4"/>
+            </svg>
+          </div>
+          <div>
+            <h3 class="modal-title">Evidence Review & Hallucination Analysis</h3>
+            <p class="modal-subtitle" id="analysisSubtitle">Source: Analyzed content</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="closeAnalysisModalBtn" aria-label="Close modal">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Score Banner -->
+        <div class="score-banner">
+          <div>
+            <div style="font-size: 11px; font-weight: 700; color: #2563eb; text-transform: uppercase; letter-spacing: 0.05em;">Grounding Score</div>
+            <div style="display: flex; align-items: baseline; gap: 6px; margin-top: 4px;">
+              <span class="score-num">89%</span>
+              <span class="tag-grounded">High Evidence Support</span>
+            </div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 4px;">4 of 5 statements verified against context chunks.</div>
+          </div>
+          <div style="width: 58px; height: 58px; border-radius: 16px; background: #ffffff; border: 1px solid #dbeafe; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9333ea" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>
+            </svg>
+            <span style="font-size: 10px; font-weight: 700; color: #475569; margin-top: 2px;">Verified</span>
+          </div>
+        </div>
+
+        <h4 style="font-size: 12px; font-weight: 700; color: #334155; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px;">
+          Sentence-Level Inspection
+        </h4>
+
+        <!-- Sentence 1 (Supported) -->
+        <div class="sentence-card verified">
+          <div style="display: flex; align-items: flex-start; gap: 8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            <div>
+              <p style="color: #0f172a; font-weight: 500;">
+                "Recent studies suggest that LLM hallucinatory artifacts can be mitigated using dual cross-attention verifiers."
+              </p>
+              <div style="margin-top: 6px; font-size: 11px; color: #047857; font-weight: 600;">
+                <span style="background: #d1fae5; padding: 2px 6px; border-radius: 4px;">Grounded</span>
+                <span style="color: #64748b; font-weight: 400; margin-left: 6px;">Source: Section 2.1, Paragraph 3 (Page 3)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sentence 2 (Flagged / Potential Hallucination) -->
+        <div class="sentence-card hallucination">
+          <div style="display: flex; align-items: flex-start; gap: 8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;">
+              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <div>
+              <p style="color: #0f172a; font-weight: 600;">
+                "However, model inference latency increases by 34% when cross-checking external token logits."
+              </p>
+              <div style="margin-top: 6px; font-size: 11px; color: #b91c1c; font-weight: 600;">
+                <span style="background: #fee2e2; padding: 2px 6px; border-radius: 4px;">Potential Hallucination</span>
+                <span style="color: #b91c1c; font-weight: 400; margin-left: 6px;">Unverified: Document does not contain explicit latency metric of 34%.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sentence 3 (Supported) -->
+        <div class="sentence-card verified">
+          <div style="display: flex; align-items: flex-start; gap: 8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            <div>
+              <p style="color: #0f172a; font-weight: 500;">
+                "Token loss penalties improve overall calibration on RAGTruth benchmark tasks."
+              </p>
+              <div style="margin-top: 6px; font-size: 11px; color: #047857; font-weight: 600;">
+                <span style="background: #d1fae5; padding: 2px 6px; border-radius: 4px;">Grounded</span>
+                <span style="color: #64748b; font-weight: 400; margin-left: 6px;">Source: Section 4.2 (Page 6)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <span style="font-size: 11.5px; color: #64748b;">Quellum NLI Verification Engine v2.4</span>
+        <button class="btn-quellum-gradient" id="doneAnalysisBtn" style="padding: 7px 18px; font-size: 13px;">Done</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 8.3 History Modal -->
+  <div class="modal-overlay" id="historyModal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-icon" style="background: #faf5ff; border-color: #f3e8ff; color: #9333ea;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+          <div>
+            <h3 class="modal-title">Verification History</h3>
+            <p class="modal-subtitle">Recent evidence checks and grounding scans</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="closeHistoryModalBtn" aria-label="Close modal">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 14px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-size: 13.5px; font-weight: 600; color: #0f172a;">Quellum_Synopsis.docx</div>
+            <div style="font-size: 11px; color: #64748b;">PDF Document · Today, 18:24</div>
+          </div>
+          <span style="font-size: 12px; font-weight: 600; color: #059669; background: #ecfdf5; padding: 2px 8px; border-radius: 6px;">94% Grounded</span>
+        </div>
+
+        <div style="padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 14px; display: flex; justify-content: PDF Document; align-items: center; justify-content: space-between;">
+          <div>
+            <div style="font-size: 13.5px; font-weight: 600; color: #0f172a;">Neural Attention Mechanisms Review</div>
+            <div style="font-size: 11px; color: #64748b;">Pasted Text · Yesterday, 14:10</div>
+          </div>
+          <span style="font-size: 12px; font-weight: 600; color: #d97706; background: #fef3c7; padding: 2px 8px; border-radius: 6px;">78% (2 Flags)</span>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="justify-content: flex-end;">
+        <button id="closeHistoryFooterBtn" style="padding: 8px 18px; border-radius: 10px; border: 1px solid #e2e8f0; background: #ffffff; font-weight: 600; font-size: 13px; color: #334155; cursor: pointer;">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8.4 Delete Conversation Confirmation Modal -->
+  <div class="modal-overlay" id="historyDeleteModal">
+    <div class="modal-dialog" style="max-width: 440px;">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-icon" style="background: #fef2f2; border-color: #fee2e2; color: #ef4444;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+          </div>
+          <div>
+            <h3 class="modal-title">Delete Conversation?</h3>
+            <p class="modal-subtitle">This action cannot be undone.</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="closeDeleteModalBtn" aria-label="Close modal">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" style="padding: 16px 20px;">
+        <p style="font-size: 14px; color: #475569; line-height: 1.5; margin: 0;">
+          Are you sure you want to delete <strong id="deleteModalConvName" style="color: #0f172a;"></strong>? All messages and evidence references in this conversation will be permanently removed.
+        </p>
+      </div>
+      <div class="modal-footer" style="justify-content: flex-end; gap: 10px; padding: 14px 20px;">
+        <button id="cancelDeleteBtn" type="button" style="padding: 8px 16px; border-radius: 9px; border: 1px solid #cbd5e1; background: #ffffff; color: #334155; font-size: 13px; font-weight: 600; cursor: pointer;">Cancel</button>
+        <button id="confirmDeleteBtn" type="button" style="padding: 8px 16px; border-radius: 9px; border: none; background: #dc2626; color: #ffffff; font-size: 13px; font-weight: 600; cursor: pointer;">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8.5 Rename Conversation Modal -->
+  <div class="modal-overlay" id="historyRenameModal">
+    <div class="modal-dialog" style="max-width: 440px;">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-icon" style="background: #eff6ff; border-color: #dbeafe; color: #2563eb;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+            </svg>
+          </div>
+          <div>
+            <h3 class="modal-title">Rename Conversation</h3>
+            <p class="modal-subtitle">Give this session a descriptive title</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="closeRenameModalBtn" aria-label="Close modal">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" style="padding: 16px 20px;">
+        <label for="renameTitleInput" style="display: block; font-size: 12.5px; font-weight: 600; color: #475569; margin-bottom: 6px;">Conversation Title</label>
+        <input type="text" id="renameTitleInput" style="width: 100%; box-sizing: border-box; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 14px; color: #0f172a; outline: none; font-family: inherit;" maxlength="80">
+      </div>
+      <div class="modal-footer" style="justify-content: flex-end; gap: 10px; padding: 14px 20px;">
+        <button id="cancelRenameBtn" type="button" style="padding: 8px 16px; border-radius: 9px; border: 1px solid #cbd5e1; background: #ffffff; color: #334155; font-size: 13px; font-weight: 600; cursor: pointer;">Cancel</button>
+        <button id="confirmRenameBtn" type="button" style="padding: 8px 16px; border-radius: 9px; border: none; background: #111827; color: #ffffff; font-size: 13px; font-weight: 600; cursor: pointer;">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Expired / unavailable conversation -->
+  <div class="modal-overlay" id="expiredModal">
+    <div class="modal-dialog" style="max-width: 440px;">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-icon" style="background: #fffbeb; border-color: #fde68a; color: #b45309;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+          <div>
+            <h3 class="modal-title">Conversation unavailable</h3>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="expiredCloseBtn" aria-label="Close modal">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" style="padding: 16px 20px;">
+        <p id="expiredModalText" style="font-size: 14px; color: #475569; line-height: 1.5; margin: 0;">This conversation has expired after 30 days of inactivity.</p>
+      </div>
+      <div class="modal-footer" style="justify-content: flex-end; gap: 10px; padding: 14px 20px;">
+        <button id="expiredNewChatBtn" type="button" style="padding: 8px 16px; border-radius: 9px; border: none; background: #111827; color: #ffffff; font-size: 13px; font-weight: 600; cursor: pointer;">Start a new conversation</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="api.js?v=20261017_01"></script>
+  <script src="script.js?v=20261017_01"></script>
+</body>
+</html>

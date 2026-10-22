@@ -1,0 +1,36 @@
+# Environment secrets
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Python environments and generated files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local app data and uploaded documents
+backend/data/
+
+# Frontend dependencies and build output
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Local research datasets, caches, and experiment output
+backend/data/ragtruth/
+backend/cache_v*/
+backend/nli_cache/
+backend/results*/
+backend/research/results*/
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

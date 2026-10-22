@@ -1,0 +1,10 @@
+{
+  "name": "quellum",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Quellum — A Hallucination Aware RAG",
+  "scripts": {
+    "dev": "python -m http.server 3000 --directory frontend",
+    "start": "python -m http.server 3000 --directory frontend"
+  }
+}

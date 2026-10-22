@@ -1,0 +1,16 @@
+# Versions marked (run) are the ones recorded in results.json for the training run. Everything else: pin after parity_test.py passes.
+numpy==2.2.6            # (run)
+tensorflow==2.21.0      # (run) CPU build; ships Keras 3 (needs *.weights.h5 filenames)
+h5py
+scikit-learn            # imported at module level by model6.py
+matplotlib              # imported at module level by model6.py (Agg backend)
+torch                   # frozen NLI cross-encoder + sentence-transformers (CPU build is enough)
+transformers
+sentencepiece           # DeBERTa-v3 tokenizer
+sentence-transformers   # all-MiniLM-L6-v2
+fastapi
+uvicorn
+pydantic>=2
+python-multipart        # FastAPI file uploads
+pypdf                   # PDF text extraction (pure Python)
+requests                # answer-generation providers
