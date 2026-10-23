@@ -308,12 +308,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (homeAnalyzing) return;
     homeAnalyzing = true;
     try {
-      const ok = await registerAndLoadPdf(homeSelectedFile, choosePdfBtnText);
+      const goToWorkspace = () => {
+        resetHomeFileSelection();
+        switchView('workspace');
+        window.location.hash = '#workspace';
+        setTimeout(() => { if (wsChatTextarea) wsChatTextarea.focus(); }, 150);
+      };
+      const ok = await registerAndLoadPdf(homeSelectedFile, choosePdfBtnText, goToWorkspace);
       if (!ok) return;
-      resetHomeFileSelection();
-      switchView('workspace');
-      window.location.hash = '#workspace';
-      setTimeout(() => { if (wsChatTextarea) wsChatTextarea.focus(); }, 150);
+      goToWorkspace();   // no-op safety net if the callback did not run
     } finally {
       homeAnalyzing = false;
     }
@@ -673,7 +676,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return activeDocumentRestore;
   }
 
-  async function registerAndLoadPdf(file, labelEl) {
+  async function registerAndLoadPdf(file, labelEl, onUploaded) {
     if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
       alert('Please select a valid PDF file.');
       return false;
@@ -687,7 +690,9 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const doc = await window.QuellumAPI.uploadPdf(file);
       newWorkspaceDocument(doc.id);
-      await loadPdfIntoWorkspace(file);
+      const loading = loadPdfIntoWorkspace(file);      // its synchronous part marks the workspace as loaded
+      if (typeof onUploaded === 'function') onUploaded();   // redirect now; the preview keeps rendering in the workspace
+      await loading;
       return true;
     } catch (err) {
       alert(apiErrorMessage(err));
@@ -735,7 +740,10 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
           const fileData = await fileOrSample.arrayBuffer();
           const loadingTask = window.pdfjsLib.getDocument({ data: fileData });
-          const pdfDoc = await loadingTask.promise;
+          const pdfDoc = await Promise.race([
+            loadingTask.promise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('PDF.js timed out')), 20000)),
+          ]);
           wsState.pdfDoc = pdfDoc;
           wsState.pages = pdfDoc.numPages;
           transitionToPreview();
