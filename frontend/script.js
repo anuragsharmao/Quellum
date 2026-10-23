@@ -6,6 +6,11 @@
 
 document.addEventListener('DOMContentLoaded', () => {
 
+  // PDF.js needs its worker script; without this line the preview fails to render.
+  if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions) {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
   // =========================================================================
   // 1. Navigation & View Routing (Single Page Architecture)
   // =========================================================================
@@ -22,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const historyActiveIndicator = document.getElementById('historyActiveIndicator');
 
   const themeToggleBtn = document.getElementById('themeToggleBtn');
+  let sessionReady = Promise.resolve();
 
   function switchView(target) {
     if (target === 'history') {
@@ -82,6 +88,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const hash = (window.location.hash || '').toLowerCase();
     if (hash === '#workspace') {
       switchView('workspace');
+      if (window.QuellumAPI) {
+        sessionReady.then(restoreActiveDocument).catch((err) => {
+          if (readActiveDocumentId()) alert(apiErrorMessage(err));
+        });
+      }
     } else if (hash === '#history') {
       switchView('history');
     } else {
@@ -275,6 +286,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (dropzoneDesc) dropzoneDesc.textContent = (file.size / (1024 * 1024)).toFixed(2) + ' MB · Verified format';
     if (choosePdfBtnText) choosePdfBtnText.textContent = 'Analyze PDF';
     setHomeActiveTab('upload');
+    performAnalyzeHomePdf();          // upload and go straight to the workspace
   }
 
   function resetHomeFileSelection() {
@@ -298,6 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const ok = await registerAndLoadPdf(homeSelectedFile, choosePdfBtnText);
       if (!ok) return;
+      resetHomeFileSelection();
       switchView('workspace');
       window.location.hash = '#workspace';
       setTimeout(() => { if (wsChatTextarea) wsChatTextarea.focus(); }, 150);
@@ -585,9 +598,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Workspace active conversation session ID
   let wsActiveSessionId = null;
+  let activeDocumentRestore = null;
 
   // --- Server-registered documents (private, tied to the anonymous session) ---
   const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+  const ACTIVE_DOCUMENT_KEY = 'quellum_active_document_id';
+
+  function readActiveDocumentId() {
+    try {
+      return localStorage.getItem(ACTIVE_DOCUMENT_KEY);
+    } catch (err) {
+      console.warn('Active document could not be read from browser storage.', err);
+      return null;
+    }
+  }
+
+  function rememberActiveDocument(documentId) {
+    try {
+      localStorage.setItem(ACTIVE_DOCUMENT_KEY, documentId);
+    } catch (err) {
+      console.warn('Active document could not be saved to browser storage.', err);
+    }
+  }
+
+  function forgetActiveDocument() {
+    try {
+      localStorage.removeItem(ACTIVE_DOCUMENT_KEY);
+    } catch (err) {
+      console.warn('Active document could not be cleared from browser storage.', err);
+    }
+  }
 
   function apiErrorMessage(err) {
     if (err && err.name === 'ApiError') return err.message;
@@ -597,8 +637,40 @@ document.addEventListener('DOMContentLoaded', () => {
   // A different document means a different conversation: clear the chat so the old document's context can never leak into the new one.
   function newWorkspaceDocument(documentId) {
     wsState.documentId = documentId;
+    rememberActiveDocument(documentId);
     wsActiveSessionId = null;
     resetChatUi();
+  }
+
+  async function restoreActiveDocument() {
+    const documentId = readActiveDocumentId();
+    if (!documentId || wsState.isLoaded) return;
+    if (activeDocumentRestore) return activeDocumentRestore;
+
+    activeDocumentRestore = (async () => {
+      try {
+        const doc = await window.QuellumAPI.getDocument(documentId);
+        wsState.documentId = doc.id;
+        wsActiveSessionId = null;
+        if (doc.sourceType === 'pdf') {
+          const bytes = await window.QuellumAPI.getDocumentFile(doc.id);
+          await loadPdfIntoWorkspace(new File([bytes], doc.name, { type: 'application/pdf' }));
+        } else if (doc.sourceType === 'text') {
+          loadTextIntoWorkspace(doc.textContent || '', doc.name || 'Text Source');
+        } else {
+          throw new Error('The saved document has an unsupported type.');
+        }
+      } catch (err) {
+        if (err && err.name === 'ApiError' && (err.code === 'expired' || err.code === 'not_found')) {
+          forgetActiveDocument();
+          return;
+        }
+        alert(apiErrorMessage(err));
+      } finally {
+        activeDocumentRestore = null;
+      }
+    })();
+    return activeDocumentRestore;
   }
 
   async function registerAndLoadPdf(file, labelEl) {
@@ -666,8 +738,8 @@ document.addEventListener('DOMContentLoaded', () => {
           const pdfDoc = await loadingTask.promise;
           wsState.pdfDoc = pdfDoc;
           wsState.pages = pdfDoc.numPages;
-          renderRealPdfPages(pdfDoc);
           transitionToPreview();
+          await renderRealPdfPages(pdfDoc);
           return;
         } catch (err) {
           console.warn('PDF.js rendering fallback to high-fidelity document viewer:', err);
@@ -748,6 +820,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function resetWorkspaceDocument() {
+    forgetActiveDocument();
     wsState.documentId = null;
     wsActiveSessionId = null;
     resetChatUi();
@@ -907,7 +980,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (editBtn) {
       editBtn.addEventListener('click', () => {
         resetWorkspaceDocument();
-        setWsInputTab('paste');
+        switchWorkspaceTab('paste');
         if (wsPasteTextarea) wsPasteTextarea.value = text;
       });
     }
@@ -1211,7 +1284,7 @@ document.addEventListener('DOMContentLoaded', () => {
     thinking.innerHTML = `
       <div style="display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 13px;">
         <span class="spinner" style="border-top-color: #7c3aed; width: 14px; height: 14px;"></span>
-        <span>Quellum is retrieving evidence and verifying the answer...</span>
+        <span>Quellum is retrieving evidence and verifying the answer… this can take up to a minute</span>
       </div>`;
     wsChatThreadList.appendChild(thinking);
     wsChatBody.scrollTop = wsChatBody.scrollHeight;
@@ -1240,9 +1313,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const bubble = document.createElement('div');
         bubble.className = 'chat-bubble-assistant';
         bubble.style.color = '#b45309';
-        bubble.textContent = apiErrorMessage(err);
+        bubble.className = 'chat-bubble-assistant chat-error-bubble';
+        bubble.textContent = apiErrorMessage(err) + ' (Your question was put back in the box so you can retry.)';
+        wsChatThreadList.querySelectorAll('.chat-error-bubble').forEach(b => b.remove());
         wsChatThreadList.appendChild(bubble);
-        setTimeout(() => bubble.remove(), 9000);
       }
       if (!wsChatThreadList.children.length) resetChatUi();
     } finally {
@@ -1482,6 +1556,7 @@ document.addEventListener('DOMContentLoaded', () => {
     resetChatUi();
     wsActiveSessionId = session.id;
     wsState.documentId = session.documentId;
+    rememberActiveDocument(session.documentId);
     switchView('workspace');
     window.location.hash = '#workspace';
 
@@ -2117,10 +2192,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Establishes the HttpOnly session cookie on first visit (the browser never sees the credential) and warms the history cache.
   if (window.QuellumAPI) {
-    window.QuellumAPI.session().then(() => quellumHistoryStore.refresh()).catch(() => { /* surfaced when the user acts */ });
+    sessionReady = window.QuellumAPI.session();
+    sessionReady.then(() => quellumHistoryStore.refresh()).catch(() => { /* surfaced when the user acts */ });
   }
 
   handleRoute();
 
 });
-

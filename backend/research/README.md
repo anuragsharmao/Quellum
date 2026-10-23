@@ -1,82 +1,88 @@
-# Lightweight Hallucination Detection for Retrieval-Augmented Generation
+# Quellum hallucination-detection research
 
-This repository contains the research implementation of Quellum's hallucination detection component. The project investigates whether a lightweight, feature-based neural model can identify unsupported content in Retrieval-Augmented Generation (RAG) responses by examining the relationship between generated answers and retrieved evidence.
+This folder contains the research implementation and manuscript for Quellum's RAG hallucination detector. The study evaluates whether a
+compact evidence-grounding model can distinguish unsupported from supported generated responses without using an LLM as a judge.
 
-## Research Objective
+## Research question and approach
 
-Retrieval-Augmented Generation improves access to external knowledge but does not guarantee that every generated claim is supported by the retrieved context. This research explores a computationally efficient approach to hallucination detection using grounding-related features, sequence modelling, and ensemble prediction.
+The detector is evaluated on RAGTruth response annotations across its QA, Data2txt, and Summary tasks. Each response is represented at the
+sentence level and scored against its source evidence. The model combines:
 
-The objective is to develop and evaluate a detector that provides useful hallucination signals without relying on an LLM-based judge.
+- A BiGRU answer/evidence architecture with cross-attention and response-level sentence context (`model6.Net`).
+- Lexical and grounding features, including stemmed unigram, bigram and trigram coverage; numeric, date and entity checks; novel-token runs;
+  and all-MiniLM-L6-v2 sentence-embedding similarity.
+- Eight frozen-NLI features derived from a cross-encoder and retrieved passages.
+- Auxiliary token and response-level training losses. At inference, sentence logits are averaged across models and pooled into a response
+  score with noisy-OR; the response decision threshold is selected on validation data.
 
-## Methodology
+The reported primary configuration uses NLI features, response-level noisy-OR loss, sentence-context modelling, and no synthetic training
+examples. Ten independently trained seeds (0–9) are evaluated. Seeds 0–4 and 5–9 were trained in separate runs using matching model
+configurations; the aggregate report records no configuration differences.
 
-The detection pipeline combines three main components:
+## Test-set results
 
-* **Grounding features:** Capture lexical overlap, semantic similarity, entity mismatches, numerical inconsistencies, and other signals related to evidence support.
-* **BiGRU-based modelling:** Processes response-level features to learn patterns associated with supported and unsupported content.
-* **Ensemble prediction:** Combines predictions from independently trained models to improve detection performance and reduce dependence on a single training run.
+The aggregate report evaluates 2,700 held-out responses: 900 each for QA, Data2txt, and Summary. The requested eight-model primary
+ensemble corresponds to the first eight seeds (0–7). Results are reported at the response level; thresholds shown were selected using
+validation data for the corresponding ensemble size.
 
-Additional experiments investigate NLI-derived features and alternative feature configurations to measure their contribution to detection performance.
+| Ensemble | Seeds | Test F1 | Test AUROC | Test AUPRC | Validation-selected threshold |
+| -------- | ----- | ------: | ---------: | ---------: | ----------------------------: |
+| Primary | 0–7 | 0.7451 | 0.8732 | 0.8043 | 0.2439 |
+| All evaluated models | 0–9 | 0.7394 | 0.8725 | 0.8038 | 0.4741 |
+| Original five-model run | 0–4 | 0.7407 | 0.8729 | 0.8052 | 0.5507 |
 
-## Dataset
+For the ten-model result, the report gives 95% source-bootstrap intervals of 0.7146–0.7636 for F1, 0.8578–0.8872 for AUROC, and
+0.7749–0.8335 for AUPRC. The first-eight result has the highest F1 among the reported first-k ensembles; the report also evaluates
+random seed subsets and does not claim that adding models always improves performance.
 
-Experiments use **RAGTruth**, a benchmark dataset containing responses generated in retrieval-augmented generation settings, with annotations identifying hallucinated content.
+On the ten-model evaluation, per-task F1 is 0.6188 (QA), 0.8515 (Data2txt), and 0.4682 (Summary). Performance therefore varies by task;
+the aggregate score should not obscure the weaker Summary result. The ten-model F1 is 0.0647 above the strongest listed hand-feature
+GBM baseline (0.6747).
 
-The evaluation uses source-disjoint data splits to reduce the risk of leakage between training and test examples.
+The saved `reproduction_check` reports that the backend aggregation reproduces the recorded F1 and AUROC for both five-seed runs. See
+[`../artifacts/results.json`](../artifacts/results.json) for the full metrics, per-task and per-generator breakdowns, seed comparisons,
+baselines, ensemble-size analysis, and figure captions. The manuscript preview is
+[`paper_final_revised_PREVIEW.pdf`](paper_final_revised_PREVIEW.pdf).
 
-## Experimental Results
+## Research files and runtime dependencies
 
-The evaluated detector configuration achieved the following results on RAGTruth:
+| File | Role |
+| ---- | ---- |
+| `model6.py` | Research architecture, preprocessing/training utilities, and prediction functions used by the backend. |
+| `extra_feats.py` | Grounding-feature definitions imported by `model6.py`. |
+| `nli_features.py` | Frozen-NLI feature extraction code imported by the backend. |
+| `synth.py` | Module imported by `model6.py`, even when the synthetic-data ratio is zero. |
+| `paper_final_revised_PREVIEW.pdf` | Manuscript preview. |
 
-| Metric   | Result |
-| -------- | -----: |
-| F1-score |   73.9 |
-| AUROC    |  0.873 |
+Keep the original research modules together and compatible; the backend imports them directly rather than maintaining a second architecture.
+The `nli_feats.npz` used in artifact export is a generated feature cache and is not a substitute for the `nli_features.py` module.
 
-The F1-score measures the balance between precision and recall at the selected decision threshold. AUROC measures how well the model distinguishes hallucinated responses from faithful ones across different thresholds.
+## Reproducing the experiment and exporting inference artifacts
 
-These results apply to the evaluated configuration and dataset; they should not be interpreted as guaranteed performance on other datasets.
+Training and evaluation require the RAGTruth data, the original run directories (including their vocabularies and per-seed predictions),
+the preprocessing/SBERT caches, and the NLI feature cache. The aggregate `artifacts/results.json` is an evaluation summary; it does not
+contain the run arguments and vocabulary expected by `scripts/export_artifacts.py`. Use the run-level `results.json` and `vocab.json`
+from the corresponding training output when exporting.
 
-## Implementation
+From `backend/`, the workflow is:
 
-The research implementation is organized into the following modules:
+1. Install `requirements.txt` and place the required research modules listed above in this directory.
+2. Run `scripts/export_artifacts.py` with the run-level results, vocabulary, RAGTruth data, matching cache, NLI feature cache, and the NLI
+   model that generated that cache. The exporter writes `config.json`, `vocab.json`, `idf.json`, `nli_idf.json`, and `norm.npz` into
+   `artifacts/`.
+3. Run `scripts/verify_ensemble.py` with the matching run's predictions and results. Require `ENSEMBLE REPRODUCED` before trusting
+   parity with that five-seed research run.
+4. Run `scripts/parity_test.py` on held-out examples. Check feature mismatches, live-versus-cached NLI differences, sentence-logit
+   differences, and response decisions before deployment.
 
-| File              | Purpose                                                            |
-| ----------------- | ------------------------------------------------------------------ |
-| `model6.py`       | Model architecture, training logic, and inference utilities        |
-| `extra_feats.py`  | Additional grounding-related feature extraction                    |
-| `nli_features.py` | NLI-derived feature processing                                     |
-| `synth.py`        | Synthetic training-data utilities used by the model implementation |
+The checked-in artifact summary evaluates the 0–7 prefix with a validation-selected response threshold of 0.2439. Ensure any runtime
+configuration for the eight-model set uses its matching threshold and feature/model configuration; the original five-seed export uses a
+different threshold and must not be reused as if it calibrated eight models.
 
-The backend imports the research implementation directly rather than duplicating the model architecture.
+## Scope and limitations
 
-**Important:** Keep these modules compatible with one another. In particular, `model6.py` imports `synth.py` at module load time, even when synthetic augmentation is disabled.
-
-## Reproducibility
-
-To reproduce the reported results, use the corresponding model configuration, dataset preprocessing pipeline, grouped data splits, feature caches, random seeds, and ensemble aggregation procedure.
-
-The evaluation configuration should specify:
-
-* Dataset split strategy and preprocessing.
-* Feature groups and NLI feature configuration.
-* Training hyperparameters and random seeds.
-* Decision-threshold selection procedure.
-* Ensemble composition and score aggregation.
-* Evaluation metrics and held-out test results.
-
-Cached features must correspond to the same preprocessing and feature-generation configuration used in the experiment. Training-only synthetic augmentation must not introduce information from validation or test data.
-
-## Limitations
-
-* Performance on RAGTruth does not establish generalization to every RAG application or domain.
-* Feature extraction and NLI processing introduce computational costs beyond the core neural model.
-* Detection errors remain possible, including unsupported claims classified as faithful and supported claims classified as hallucinations.
-* Further evaluation on independent datasets is needed to assess broader generalization.
-
-## Integration with Quellum
-
-This research implementation serves as the hallucination detection component of Quellum. The application uses the detector to assess generated responses against retrieved evidence, complementing the generation and retrieval stages of the RAG pipeline.
-
-The research model and the application’s LLM generation providers serve different purposes: the detector evaluates evidence support, while the generation providers produce responses.
-
+- These are benchmark results on RAGTruth, not a guarantee of generalization to other domains or production RAG systems.
+- The threshold is specific to the evaluated model set and validation split. Scores are not calibrated probabilities.
+- Sentence and token metrics are additional evaluation views; the production API returns sentence scores and a response-level decision, not
+  token-level hallucination spans.
+- The aggregate results are retrospective benchmark evidence. They do not establish latency, memory use, or performance under live traffic.

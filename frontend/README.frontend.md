@@ -59,10 +59,12 @@ A pixel-faithful, pure **Vanilla JavaScript / HTML5 / CSS3** recreation of the Q
 
 ## 🚀 How to Run
 
-### Option 1: Direct File Open (Zero Setup)
-Simply double-click or open [`frontend/index.html`](file:///c:/Users/anura/Documents/GitHub/Quellum/frontend/index.html) in Chrome, Edge, Safari, or Firefox.
+### Option 1: Run the integrated application (recommended)
+Start the backend from `backend/` with `python -m uvicorn app.main:app --reload --port 8000`, then open
+`http://localhost:8000`. The backend serves this frontend and its API from the same origin.
 
-### Option 2: Local Web Server
+### Option 2: Run the frontend separately
+Start the backend on port 8000, then run the static frontend server:
 ```bash
 # Using Python
 python -m http.server 3000 --directory frontend
@@ -70,7 +72,13 @@ python -m http.server 3000 --directory frontend
 # Or using npm
 npm start
 ```
-Then open `http://localhost:3000` in your browser.
+Open `http://localhost:3000`. For local development on ports 3000, 5173, or 5500, the API client automatically sends `/api/...` requests to
+the backend on port 8000 and includes the session cookie. The backend's default CORS origins allow `localhost` and `127.0.0.1` on these
+frontend ports. For another frontend/API host combination, set `window.QUELLUM_API_BASE` before loading `api.js` and configure the backend's
+`QUELLUM_CORS_ORIGINS` and cookie settings for that origin.
+
+Opening `index.html` directly as a `file://` URL only previews the design; browser origin and cookie restrictions prevent it from being a
+reliable way to use the backend-connected application.
 
 ---
 

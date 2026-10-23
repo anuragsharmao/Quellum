@@ -1,0 +1,73 @@
+{
+ "created": "2026-10-23 15:10:09",
+ "source_results": "results.json",
+ "n_vocab": 28607,
+ "model_args": {
+  "emb": 64,
+  "hidden": 64,
+  "dropout": 0.4,
+  "emb_drop": 0.2,
+  "ablate": "none",
+  "ctx": true,
+  "kd_weight": 0.0,
+  "nli_dim": 19,
+  "topk": 3,
+  "max_ans": 64,
+  "max_ev": 100,
+  "no_features": false,
+  "sent_score": "head",
+  "resp_agg": "noisyor",
+  "feat_groups": "all",
+  "sbert_model": "all-MiniLM-L6-v2",
+  "seeds": 5,
+  "xf_names": [
+   "stem_cov",
+   "stem_cov_idf",
+   "bi_cov",
+   "tri_cov",
+   "n_num_unsup",
+   "n_date_unsup",
+   "n_ent_unsup",
+   "frac_ent_unsup",
+   "max_novel_run",
+   "sbert_max",
+   "sbert_top3"
+  ]
+ },
+ "ensemble": {
+  "name": "BiGRU-attn +feats[stem,num,date,ngram,entity,sbert] +resp-loss(noisyor) +ctx +verifier ENSEMBLE x5",
+  "size": 5,
+  "agg": "noisyor",
+  "thr": 0.5507253129650888,
+  "reported": {
+   "f1": 0.7406628090478695,
+   "precision": 0.7348643006263048,
+   "recall": 0.7465535524920467,
+   "auroc": 0.8728877853228806,
+   "auprc": 0.8052146762150918
+  }
+ },
+ "nli": {
+  "model": "cross-encoder/nli-deberta-v3-xsmall",
+  "topk": 3,
+  "max_words": 90,
+  "max_len": 256,
+  "bs": 32
+ },
+ "sbert": {
+  "model": "all-MiniLM-L6-v2"
+ },
+ "xf_names": [
+  "stem_cov",
+  "stem_cov_idf",
+  "bi_cov",
+  "tri_cov",
+  "n_num_unsup",
+  "n_date_unsup",
+  "n_ent_unsup",
+  "frac_ent_unsup",
+  "max_novel_run",
+  "sbert_max",
+  "sbert_top3"
+ ]
+}

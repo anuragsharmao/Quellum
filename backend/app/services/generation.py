@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from ..config import Settings
 from .errors import GenerationFailed
@@ -29,10 +30,30 @@ def _post_json(provider: str, url: str, timeout: float, *, headers: dict, json: 
     try:
         response = requests.post(url, timeout=timeout, headers=headers, params=params, json=json)
         response.raise_for_status()
+    except requests.HTTPError as e:
+        r = getattr(e, "response", None)
+        status = getattr(r, "status_code", None)
+        def _fail(msg):
+            err = GenerationFailed(msg)
+            err.http_status = status
+            return err
+        body = (getattr(r, "text", "") or "")[:300].replace("\n", " ")     # provider error text never contains our key
+        log.warning("%s generation request failed: HTTP %s - %s", provider, status, body)
+        if status in (401, 403):
+            raise _fail(f"{provider} rejected the API key (HTTP {status}). Check the key in your .env file.") from e
+        if status == 429:
+            raise _fail(f"{provider} rate limit reached (HTTP 429). Wait a minute and try again.") from e
+        if status in (400, 404):
+            raise _fail(f"{provider} rejected the request (HTTP {status}); the model name may be wrong or retired.") from e
+        raise _fail(f"{provider} returned an error (HTTP {status}). Please try again.") from e
+    except requests.RequestException as e:
+        log.warning("%s generation request failed (network): %s: %s", provider, type(e).__name__, e)
+        raise GenerationFailed("Could not reach the answer service. Check your internet connection and try again.") from e
+    try:
         result = response.json()
-    except (requests.RequestException, ValueError) as e:
-        log.warning("%s generation request failed: %s", provider, type(e).__name__)
-        raise GenerationFailed("The answer service did not respond. Please try again.") from e
+    except ValueError as e:
+        log.warning("%s returned non-JSON content", provider)
+        raise GenerationFailed("The answer service returned an invalid response.") from e
     if not isinstance(result, dict):
         raise GenerationFailed("The answer service returned an invalid response.")
     return result
@@ -40,8 +61,55 @@ def _post_json(provider: str, url: str, timeout: float, *, headers: dict, json: 
 
 def _require_text(text) -> str:
     if not isinstance(text, str) or not text.strip():
-        raise GenerationFailed("The answer service returned an empty answer.")
+        raise GenerationFailed("The model returned an empty answer (a reasoning model may have used its whole token budget thinking). Please try again.")
     return text.strip()
+
+
+_GROQ_SKIP = ("guard", "whisper", "tts", "playai", "orpheus", "embed", "safeguard", "distil-whisper", "compound")
+_GROQ_PREFER = ("llama-3.3-70b-versatile", "llama-3.1-8b-instant")
+
+
+def _get_json(provider: str, url: str, timeout: float, headers: dict, params=None):
+    import requests
+    try:
+        r = requests.get(url, timeout=timeout, headers=headers, params=params)
+        r.raise_for_status()
+        return r.json()
+    except (requests.RequestException, ValueError) as e:
+        log.warning("%s model list request failed: %s", provider, type(e).__name__)
+        return None
+
+
+def pick_groq_model(ids) -> str | None:
+    """Choose a chat model from Groq's live list: known good names first, then any Llama, then anything that is not a guard/audio model."""
+    ids = [i for i in ids if isinstance(i, str) and not any(k in i.lower() for k in _GROQ_SKIP)]
+    for name in _GROQ_PREFER:
+        if name in ids:
+            return name
+    for kw in ("llama", "gpt-oss-20b", "gpt-oss", "qwen", "kimi"):
+        hit = [i for i in sorted(ids) if kw in i.lower()]
+        if hit:
+            return hit[0]
+    return sorted(ids)[0] if ids else None
+
+
+def _version_key(name: str):
+    nums = re.findall(r"\d+(?:\.\d+)?", name)
+    return tuple(float(n) for n in nums[:2]) or (0.0,)
+
+
+def pick_gemini_model(models) -> str | None:
+    """Newest 'flash' text model that supports generateContent. Stable releases beat preview/experimental ones of equal version."""
+    cands = []
+    for m in models or []:
+        name = str(m.get("name", "")).replace("models/", "")
+        if "generateContent" not in (m.get("supportedGenerationMethods") or []):
+            continue
+        low = name.lower()
+        if "flash" not in low or any(k in low for k in ("image", "tts", "live", "audio", "embed", "lite", "thinking", "robotics", "computer")):
+            continue
+        cands.append((_version_key(name), not any(k in low for k in ("preview", "exp")), name))
+    return max(cands)[2] if cands else None
 
 
 class GroqGenerator:
@@ -49,18 +117,38 @@ class GroqGenerator:
         self.key, self.model, self.timeout, self.max_chars = (
             s.groq_api_key, s.llm_model, s.llm_timeout_s, s.llm_max_prompt_chars)
 
-    def generate(self, question, passages) -> str:
+    def _call(self, question, passages) -> str:
         result = _post_json(
             "Groq", "https://api.groq.com/openai/v1/chat/completions", self.timeout,
             headers={"Authorization": f"Bearer {self.key}", "Content-Type": "application/json"},
-            json={"model": self.model, "temperature": 0, "max_tokens": 700,
-                  "messages": [{"role": "system", "content": SYSTEM},
-                               {"role": "user", "content": build_user_prompt(question, passages, self.max_chars)}]})
+            json=self._payload(question, passages))
         try:
             text = result["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as e:
             raise GenerationFailed("The answer service returned an invalid response.") from e
         return _require_text(text)
+
+    def _payload(self, question, passages) -> dict:
+        body = {"model": self.model, "temperature": 0, "max_tokens": 2048,
+                "messages": [{"role": "system", "content": SYSTEM},
+                             {"role": "user", "content": build_user_prompt(question, passages, self.max_chars)}]}
+        if "gpt-oss" in self.model.lower():          # reasoning models: keep thinking short so the visible answer is not starved
+            body["reasoning_effort"] = "low"
+        return body
+
+    def generate(self, question, passages) -> str:
+        try:
+            return self._call(question, passages)
+        except GenerationFailed as e:
+            if getattr(e, "http_status", None) not in (400, 404):
+                raise
+            data = _get_json("Groq", "https://api.groq.com/openai/v1/models", self.timeout, {"Authorization": f"Bearer {self.key}"})
+            new = pick_groq_model([m.get("id") for m in (data or {}).get("data", [])])
+            if not new or new == self.model:
+                raise
+            log.warning("Groq model %r is unavailable; switching to %r (set QUELLUM_LLM_MODEL=%s to make this permanent)", self.model, new, new)
+            self.model = new
+            return self._call(question, passages)
 
 
 class GeminiGenerator:
@@ -68,19 +156,34 @@ class GeminiGenerator:
         self.key, self.model, self.timeout, self.max_chars = (
             s.gemini_api_key, s.llm_fallback_model, s.llm_timeout_s, s.llm_max_prompt_chars)
 
-    def generate(self, question, passages) -> str:
+    def _call(self, question, passages) -> str:
         result = _post_json(
             "Gemini", f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent",
             self.timeout, headers={"x-goog-api-key": self.key, "Content-Type": "application/json"},
             json={"systemInstruction": {"parts": [{"text": SYSTEM}]},
                   "contents": [{"role": "user", "parts": [{"text": build_user_prompt(question, passages, self.max_chars)}]}],
-                  "generationConfig": {"temperature": 0, "maxOutputTokens": 700}})
+                  "generationConfig": {"temperature": 0, "maxOutputTokens": 2048}})
         try:
             text = "".join(part["text"] for part in result["candidates"][0]["content"]["parts"]
                            if isinstance(part, dict) and isinstance(part.get("text"), str))
         except (KeyError, IndexError, TypeError) as e:
             raise GenerationFailed("The answer service returned an invalid response.") from e
         return _require_text(text)
+
+    def generate(self, question, passages) -> str:
+        try:
+            return self._call(question, passages)
+        except GenerationFailed as e:
+            if getattr(e, "http_status", None) not in (400, 404):
+                raise
+            data = _get_json("Gemini", "https://generativelanguage.googleapis.com/v1beta/models", self.timeout,
+                             {"x-goog-api-key": self.key}, params={"pageSize": 200})
+            new = pick_gemini_model((data or {}).get("models"))
+            if not new or new == self.model:
+                raise
+            log.warning("Gemini model %r is unavailable; switching to %r (set QUELLUM_LLM_FALLBACK_MODEL=%s to make this permanent)", self.model, new, new)
+            self.model = new
+            return self._call(question, passages)
 
 
 class FallbackGenerator:
@@ -90,15 +193,16 @@ class FallbackGenerator:
     def generate(self, question, passages) -> str:
         try:
             return self.primary.generate(question, passages)
-        except GenerationFailed:
+        except GenerationFailed as first:
             if self.fallback is None:
                 raise
+            primary_error = first.message
             log.warning("primary answer provider failed; trying configured fallback")
         try:
             return self.fallback.generate(question, passages)
         except GenerationFailed as e:
             log.error("fallback answer provider failed")
-            raise GenerationFailed("The answer service did not respond. Please try again.") from e
+            raise GenerationFailed(f"{primary_error} Fallback also failed: {e.message}") from e
 
 
 class OpenAICompatibleGenerator:

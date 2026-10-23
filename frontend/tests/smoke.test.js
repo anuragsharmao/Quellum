@@ -12,6 +12,7 @@ const assert = require('assert');
 const html = [];                       // every innerHTML assignment, to check escaping
 const els = {};
 const alerts = [];
+const storage = new Map([['quellum_active_document_id', 'restored-pdf']]);
 function makeEl(id) {
   const listeners = {};
   const el = {
@@ -32,14 +33,15 @@ const $ = (id) => (els[id] = els[id] || makeEl(id));
 
 class ApiError extends Error { constructor(status, code, message) { super(message); this.name = 'ApiError'; this.status = status; this.code = code; } }
 const calls = [];
-const db = { docs: {}, convs: {}, n: 0, mode: 'ok' };
+const db = { docs: { 'restored-pdf': { id: 'restored-pdf', sourceType: 'pdf', name: 'Restored.pdf' } }, convs: {}, n: 0, mode: 'ok' };
 const now = () => new Date().toISOString();
 const api = {
   ApiError,
   session: async () => ({ status: 'ok' }),
   uploadPdf: async (f) => { calls.push('uploadPdf'); const id = 'd' + (++db.n); db.docs[id] = { id, sourceType: 'pdf', name: f.name }; return db.docs[id]; },
   createTextDocument: async (t, n) => { calls.push('createTextDocument'); const id = 'd' + (++db.n); db.docs[id] = { id, sourceType: 'text', name: n, text: t }; return db.docs[id]; },
-  getDocumentFile: async () => new ArrayBuffer(8),
+  getDocument: async (id) => { calls.push('getDocument:' + id); return Object.assign({}, db.docs[id], { textContent: db.docs[id].text }); },
+  getDocumentFile: async (id) => { calls.push('getDocumentFile:' + id); return new ArrayBuffer(8); },
   createConversation: async ({ documentId, title }) => {
     calls.push('createConversation'); const d = db.docs[documentId]; const id = 'c' + (++db.n);
     return (db.convs[id] = { id, title, sourceType: d.sourceType, documentId, documentName: d.name, textContent: d.text, createdAt: now(), updatedAt: now(), messages: [] });
@@ -68,10 +70,11 @@ const api = {
 };
 
 let domReady;
-const win = { location: { hash: '' }, addEventListener() {}, scrollTo() {}, QuellumAPI: api, pdfjsLib: undefined, indexedDB: undefined };
+const win = { location: { hash: '#workspace' }, addEventListener() {}, scrollTo() {}, QuellumAPI: api, pdfjsLib: undefined, indexedDB: undefined };
 const ctx = vm.createContext({
   window: win, console, setTimeout, clearTimeout, alert: (m) => alerts.push(m), File: require('buffer').File, URL, Promise, Date, Math, JSON, ArrayBuffer,
-  localStorage: { removeItem() {}, getItem: () => null, setItem() {} }, sessionStorage: { removeItem() {}, getItem: () => null, setItem() {} },
+  localStorage: { removeItem: (key) => storage.delete(key), getItem: (key) => storage.get(key) || null, setItem: (key, value) => storage.set(key, String(value)) },
+  sessionStorage: { removeItem() {}, getItem: () => null, setItem() {} },
   IntersectionObserver: class { observe() {} disconnect() {} }, matchMedia: () => ({ matches: false, addEventListener() {} }),
   document: { getElementById: $, createElement: () => makeEl('new'), querySelector: () => makeEl('qs'), querySelectorAll: () => [],
     addEventListener: (t, f) => { if (t === 'DOMContentLoaded') domReady = f; }, body: { style: {}, classList: { add() {}, remove() {}, toggle() {} } },
@@ -82,7 +85,14 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'script.js'), 'utf8')
 
 (async () => {
   domReady();
-  await new Promise(r => setTimeout(r, 20));
+  await new Promise(r => setTimeout(r, 60));
+  assert(calls.includes('getDocument:restored-pdf'), 'workspace reload restores the active document from the server');
+  assert(calls.includes('getDocumentFile:restored-pdf'), 'PDF bytes are fetched only when restoring a saved PDF');
+  assert.strictEqual($('wsPreviewHeader').style.display, 'flex');
+  assert.strictEqual($('wsDocTitle').textContent, 'Restored.pdf');
+  assert.strictEqual(storage.get('quellum_active_document_id'), 'restored-pdf');
+  await $('wsUploadNewBtn').fire('click');
+  assert.strictEqual(storage.has('quellum_active_document_id'), false, 'starting a new document clears the saved active document');
 
   // 1. Paste text on Home -> Analyze -> Workspace shows the text, chat initialised, document registered once
   $('pasteInput').value = 'Paris is the capital of France. It is on the Seine.';

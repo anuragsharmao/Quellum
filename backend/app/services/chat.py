@@ -3,6 +3,7 @@ generator, analyzer) so the whole flow is testable without a model. Nothing is p
 from __future__ import annotations
 
 import logging
+import time
 
 from ..config import MAX_QUESTION_CHARS, Settings
 from . import conversations as convs
@@ -46,9 +47,12 @@ def send_message(db, settings: Settings, session_id: str, cid: str, content: str
     passages = docs.retrieve(db, embedder, info["documentId"], content, settings.top_k)
     if not passages:
         raise InvalidInput("This document has no searchable text.")
+    t0 = time.perf_counter()
     answer = generator.generate(content, [p["text"] for p in passages])
+    t1 = time.perf_counter()
     context = "\n\n".join(p["text"] for p in sorted(passages, key=lambda p: p["idx"]))
     analysis = analyze_answer(analyzer, content, context, answer)
+    log.info("chat timing: generation %.1fs, hallucination analysis %.1fs (%s)", t1 - t0, time.perf_counter() - t1, analysis.get("status"))
     sources = [dict(page=p["page"] if info["sourceType"] == "pdf" else None,
                     section=f"Page {p['page']}" if info["sourceType"] == "pdf" else "Pasted text",
                     excerpt=p["text"][:EXCERPT_CHARS], score=round(p["score"], 4)) for p in passages]

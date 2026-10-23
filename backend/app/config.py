@@ -8,6 +8,25 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
+# Load .env BEFORE any setting below is read (values are read once, at import time). Real environment variables always win.
+# backend/.env is read first, then the repository-root .env as a fallback.
+try:
+    from dotenv import load_dotenv
+    for _env_file in (BACKEND_DIR / ".env", BACKEND_DIR.parent / ".env"):
+        if _env_file.is_file():
+            load_dotenv(_env_file, override=False, encoding="utf-8-sig")
+except ImportError:  # python-dotenv missing: fall back to a tiny parser so the keys are still picked up
+    for _env_file in (BACKEND_DIR / ".env", BACKEND_DIR.parent / ".env"):
+        if not _env_file.is_file():
+            continue
+        for _line in _env_file.read_text(encoding="utf-8-sig").splitlines():
+            _line = _line.strip()
+            if not _line or _line.startswith("#") or "=" not in _line:
+                continue
+            _k, _v = _line.split("=", 1)
+            _v = _v.split(" #", 1)[0].strip().strip('"').strip("'")
+            os.environ.setdefault(_k.strip(), _v)
+
 # request limits: application policy, not part of the research model
 MAX_QUESTION_CHARS = int(os.environ.get("QUELLUM_MAX_QUESTION_CHARS", 2_000))
 MAX_CONTEXT_CHARS = int(os.environ.get("QUELLUM_MAX_CONTEXT_CHARS", 30_000))
@@ -65,13 +84,13 @@ class Settings:
     chunk_overlap: int = int(os.environ.get("QUELLUM_CHUNK_OVERLAP", 30))
     top_k: int = int(os.environ.get("QUELLUM_TOP_K", 5))
     llm_provider: str = os.environ.get("QUELLUM_LLM_PROVIDER", "groq").lower()   # groq | openai_compatible | anthropic | none
-    llm_model: str = os.environ.get("QUELLUM_LLM_MODEL", "llama-3.1-8b-instant")
+    llm_model: str = os.environ.get("QUELLUM_LLM_MODEL", "llama-3.3-70b-versatile")
     llm_base_url: str = os.environ.get("QUELLUM_LLM_BASE_URL", "https://api.openai.com/v1")
     llm_api_key: str = os.environ.get("QUELLUM_LLM_API_KEY", "")
     groq_api_key: str = os.environ.get("GROQ_API_KEY", os.environ.get("QUELLUM_GROQ_API_KEY", ""))
     gemini_api_key: str = os.environ.get("GEMINI_API_KEY", os.environ.get("QUELLUM_GEMINI_API_KEY", ""))
     llm_fallback_provider: str = os.environ.get("QUELLUM_LLM_FALLBACK_PROVIDER", "gemini").lower()
-    llm_fallback_model: str = os.environ.get("QUELLUM_LLM_FALLBACK_MODEL", "gemini-2.5-flash")
+    llm_fallback_model: str = os.environ.get("QUELLUM_LLM_FALLBACK_MODEL", "gemini-3.8-flash")
     llm_timeout_s: float = float(os.environ.get("QUELLUM_LLM_TIMEOUT_S", 60))
     llm_max_prompt_chars: int = int(os.environ.get("QUELLUM_LLM_MAX_PROMPT_CHARS", 12_000))
     # Seed ids map to models/seed_{id}.weights.h5 (0-4) or seed{id}.weights.h5 (5-9).
@@ -81,7 +100,10 @@ class Settings:
     models_dir: Path = Path(os.environ.get("QUELLUM_MODELS_DIR", BACKEND_DIR / "models"))
     artifacts_dir: Path = Path(os.environ.get("QUELLUM_ARTIFACTS_DIR", BACKEND_DIR / "artifacts"))
     cors_origins: tuple = tuple(o.strip() for o in os.environ.get(
-        "QUELLUM_CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",") if o.strip())
+        "QUELLUM_CORS_ORIGINS",
+        "http://localhost:5173,http://localhost:3000,http://localhost:5500,"
+        "http://127.0.0.1:5173,http://127.0.0.1:3000,http://127.0.0.1:5500"
+    ).split(",") if o.strip())
     torch_threads: int = int(os.environ.get("QUELLUM_TORCH_THREADS", 0))   # 0 = library default
     tf_threads: int = int(os.environ.get("QUELLUM_TF_THREADS", 0))
 

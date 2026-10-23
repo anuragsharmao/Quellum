@@ -7,7 +7,12 @@
  */
 (function () {
   'use strict';
-  const BASE = String(window.QUELLUM_API_BASE || '').replace(/\/+$/, '');
+  const location = window.location;
+  const localFrontend = location &&
+    (location.hostname === 'localhost' || location.hostname === '127.0.0.1') &&
+    (location.port === '3000' || location.port === '5173' || location.port === '5500');
+  const defaultBase = localFrontend ? location.protocol + '//' + location.hostname + ':8000' : '';
+  const BASE = String(window.QUELLUM_API_BASE || defaultBase).replace(/\/+$/, '');
 
   class ApiError extends Error {
     constructor(status, code, message) {
