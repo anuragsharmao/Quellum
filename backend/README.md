@@ -10,6 +10,8 @@ FastAPI service around the configured BiGRU ensemble (models 0–7 by default; s
 threshold of 0.2439; do not use the old five-model threshold of 0.5507 for this eight-model ensemble.
 
 ## Setup (Windows, CPU)
+The backend runtime is pinned to Python 3.12.11 (also used by the Docker image) because the pinned TensorFlow 2.21.0 does not provide a stable build for Python 3.14. Keep the Render service on Python 3.12.11 as well.
+
 1. `python -m venv .venv && .venv\Scripts\activate && pip install -r requirements.txt`
 2. Copy `extra_feats.py`, `nli_features.py`, and `synth.py` into `research/` (see [research/README.md](research/README.md)).
 3. Weights for model ids 0–4 are in `models/seed_{0..4}.weights.h5`; ids 5–9 are in `models/seed{k}.weights.h5` (Keras 3 requires the suffix). The server defaults to ids 0–7; set `QUELLUM_DETECTOR_SEEDS` to a comma-separated unique list from 0–9 to choose an alternative combination.
